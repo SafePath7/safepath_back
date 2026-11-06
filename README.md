@@ -35,6 +35,8 @@ SPRING_PROFILES_ACTIVE=local sh gradlew bootRun
 
 동일한 환경에서 `SPRING_PROFILES_ACTIVE=local sh gradlew test`로 컨텍스트 테스트를 실행합니다. Windows에서는 같은 환경변수와 `local` 프로필을 설정한 뒤 `gradlew.bat bootRun`, `gradlew.bat test`를 사용할 수 있습니다. `gradlew.bat build` 또는 `sh gradlew build`는 테스트 후 빌드하며 결과물은 `build/libs`에 생성됩니다. 빌드 산출물 정리에는 `gradlew.bat clean` 또는 `sh gradlew clean`을 사용합니다. 기본 프로필에는 DB 접속 정보가 없어 컨텍스트 테스트가 실패할 수 있습니다.
 
+Windows PowerShell 명령과 환경변수 설정은 [Docker 문서](docs/docker/README.md#windows-powershell)를 참고하세요. 로컬 Flyway는 Spring Boot가 실행하므로 팀원이 Flyway CLI를 설치할 필요는 없습니다. 공용 RDS 마이그레이션은 DB 담당자만 수행합니다.
+
 ## 프로젝트 구조
 
 - `src/main/java/` — Spring Boot 애플리케이션
