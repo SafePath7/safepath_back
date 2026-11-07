@@ -10,7 +10,7 @@ The in-memory model is separate from JPA entities. It contains a `UUID` session 
 
 - `src/main/java/com/safepath/backend/session/model/ActiveSession.java` — immutable in-memory session model.
 - `src/main/java/com/safepath/backend/session/store/ActiveSessionStore.java` — Spring component providing in-memory operations.
-- `src/main/java/com/safepath/backend/session/service/SafeReturnSessionService.java` — session start business logic.
+- `src/main/java/com/safepath/backend/session/service/SafeReturnSessionService.java` — session start, active-session lookup, and session termination business logic.
 - `src/test/java/com/safepath/backend/session/store/ActiveSessionStoreTest.java` — unit tests.
 - `src/test/java/com/safepath/backend/session/service/SafeReturnSessionServiceTest.java` — session start unit tests.
 
@@ -32,7 +32,7 @@ The method enforces ownership against the supplied ID but does not authenticate 
 - `Optional<ActiveSession> findById(UUID sessionId)` finds a session by UUID.
 - `Optional<ActiveSession> findByUserId(Long userId)` finds the user's active session.
 - `void remove(UUID sessionId)` removes a session; removing a missing ID has no effect.
-- `void endSession(UUID sessionId, Long userId)` removes the active session only when the supplied user owns it.
+- `void endSession(UUID sessionId, Long userId)` removes the active session only when the supplied user owns it. It throws `IllegalArgumentException` for invalid input, `NoSuchElementException` when the session is missing or already ended, and `SecurityException` when another user owns the session.
 - `ActiveSession getSessionStatus(UUID sessionId, Long userId)` returns the active session after checking its owner.
 
 Example:
@@ -69,7 +69,16 @@ The tests cover saving and lookup by both identifiers, absent lookups, removal, 
 
 Session termination coverage additionally includes owner-only removal and removal outcomes, deletion from both indexes, new session start after ending, missing/already-ended sessions, invalid inputs, and concurrent end requests.
 
-Tests executed and passed: `.\gradlew.bat test --tests "com.safepath.backend.session.service.SafeReturnSessionServiceTest" --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"` (24 tests: service 15, store 9).
+### Test results and current limitations
+
+- Command: `.\gradlew.bat test`
+- Result: **25 tests total: 24 passed, 1 failed, 0 skipped.**
+- Failed test: `BackendApplicationTests.contextLoads()`. Spring context initialization fails because the default profile has no DataSource URL configured (`Failed to determine a suitable driver class`).
+- The session service tests (15) and store tests (9) all passed.
+- Connecting to the local PostgreSQL environment and rerunning the complete test suite remain follow-up work.
+- Flyway schema management and the Hibernate `ddl-auto` setting will be confirmed with the database-owning team before applying any related configuration.
+
+The full test suite is **not fully passing**. Its context-load test remains blocked by the default-profile database configuration; the session unit-test results above are separate from that limitation.
 
 ## Pending decisions
 
