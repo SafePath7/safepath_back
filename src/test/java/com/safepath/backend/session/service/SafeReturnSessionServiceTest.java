@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -65,6 +66,47 @@ class SafeReturnSessionServiceTest {
 		assertTrue(store.findByUserId(0L).isEmpty());
 		assertTrue(store.findByUserId(-1L).isEmpty());
 		assertTrue(store.findByUserId(1L).isEmpty());
+	}
+
+	@Test
+	void retrievesOwnActiveSessionStartedByService() {
+		ActiveSession startedSession = service.startSession(42L);
+
+		assertEquals(startedSession, service.getSessionStatus(startedSession.id(), 42L));
+	}
+
+	@Test
+	void rejectsMissingSessionId() {
+		assertThrows(NoSuchElementException.class,
+				() -> service.getSessionStatus(UUID.randomUUID(), 42L));
+	}
+
+	@Test
+	void rejectsSessionOwnedByAnotherUser() {
+		ActiveSession session = service.startSession(42L);
+
+		assertThrows(SecurityException.class,
+				() -> service.getSessionStatus(session.id(), 43L));
+		assertEquals(session, store.findById(session.id()).orElseThrow());
+	}
+
+	@Test
+	void rejectsInvalidStatusLookupArguments() {
+		UUID sessionId = UUID.randomUUID();
+
+		assertThrows(IllegalArgumentException.class, () -> service.getSessionStatus(null, 42L));
+		assertThrows(IllegalArgumentException.class, () -> service.getSessionStatus(sessionId, null));
+		assertThrows(IllegalArgumentException.class, () -> service.getSessionStatus(sessionId, 0L));
+		assertThrows(IllegalArgumentException.class, () -> service.getSessionStatus(sessionId, -1L));
+	}
+
+	@Test
+	void removedSessionCannotBeRetrieved() {
+		ActiveSession session = service.startSession(42L);
+		store.remove(session.id());
+
+		assertThrows(NoSuchElementException.class,
+				() -> service.getSessionStatus(session.id(), 42L));
 	}
 
 	@Test

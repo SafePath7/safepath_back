@@ -20,12 +20,19 @@ The in-memory model is separate from JPA entities. It contains a `UUID` session 
 
 The service validates the identifier's shape only. It does not authenticate the caller or check whether the user exists; those concerns require the approved authentication and user-service integration.
 
+## Getting an active session
+
+`ActiveSession getSessionStatus(UUID sessionId, Long userId)` looks up the current in-memory session by UUID and returns it only when its `userId` matches the supplied user ID. It throws `IllegalArgumentException` for a null session ID or a null/non-positive user ID, `NoSuchElementException` when no active session exists, and `SecurityException` when the session belongs to another user. It does not query ended-session history or return a session status field; the current model has no status field.
+
+The method enforces ownership against the supplied ID but does not authenticate that ID. A future HTTP layer must derive or validate the user identity through the approved authentication integration and decide how internal exceptions map to external error responses.
+
 ## Methods
 
 - `void saveSession(ActiveSession session)` stores a session. It throws `IllegalStateException` if the session UUID already exists or the user already has an active session.
 - `Optional<ActiveSession> findById(UUID sessionId)` finds a session by UUID.
 - `Optional<ActiveSession> findByUserId(Long userId)` finds the user's active session.
 - `void remove(UUID sessionId)` removes a session; removing a missing ID has no effect.
+- `ActiveSession getSessionStatus(UUID sessionId, Long userId)` returns the active session after checking its owner.
 
 Example:
 
@@ -54,9 +61,9 @@ Run the targeted unit test on Windows:
 .\gradlew.bat test --tests "com.safepath.backend.session.service.SafeReturnSessionServiceTest" --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"
 ```
 
-The tests cover saving and lookup by both identifiers, absent lookups, removal, duplicate UUID and user rejection without replacement, model null validation, session start and persistence, generated UUID and start time, invalid user IDs, duplicate starts, and concurrent start attempts.
+The tests cover saving and lookup by both identifiers, absent lookups, removal, duplicate UUID and user rejection without replacement, model null validation, session start and persistence, generated UUID and start time, invalid user IDs, duplicate starts, concurrent start attempts, owned session lookup, missing/deleted sessions, invalid lookup arguments, and rejection of another user's session.
 
-Tests executed and passed: `.\gradlew.bat test --tests "com.safepath.backend.session.service.SafeReturnSessionServiceTest" --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"` (12 tests).
+Tests executed and passed: `.\gradlew.bat test --tests "com.safepath.backend.session.service.SafeReturnSessionServiceTest" --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"` (17 tests: service 9, store 8).
 
 ## Pending decisions
 
