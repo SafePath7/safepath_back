@@ -55,6 +55,24 @@ class ActiveSessionStoreTest {
 	}
 
 	@Test
+	void removesSessionOnlyWhenOwnerMatchesAndReportsRemovalOutcome() {
+		ActiveSession session = new ActiveSession(UUID.randomUUID(), 42L, Instant.now());
+		store.saveSession(session);
+
+		assertEquals(ActiveSessionStore.RemovalResult.NOT_OWNER,
+				store.removeIfOwned(session.id(), 43L));
+		assertEquals(session, store.findById(session.id()).orElseThrow());
+		assertEquals(session, store.findByUserId(42L).orElseThrow());
+
+		assertEquals(ActiveSessionStore.RemovalResult.REMOVED,
+				store.removeIfOwned(session.id(), 42L));
+		assertEquals(ActiveSessionStore.RemovalResult.NOT_FOUND,
+				store.removeIfOwned(session.id(), 42L));
+		assertTrue(store.findById(session.id()).isEmpty());
+		assertTrue(store.findByUserId(42L).isEmpty());
+	}
+
+	@Test
 	void rejectsDuplicateSessionIdWithoutReplacingExistingSession() {
 		UUID sessionId = UUID.randomUUID();
 		ActiveSession existing = new ActiveSession(sessionId, 42L, Instant.now());

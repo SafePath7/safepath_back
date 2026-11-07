@@ -32,6 +32,7 @@ The method enforces ownership against the supplied ID but does not authenticate 
 - `Optional<ActiveSession> findById(UUID sessionId)` finds a session by UUID.
 - `Optional<ActiveSession> findByUserId(Long userId)` finds the user's active session.
 - `void remove(UUID sessionId)` removes a session; removing a missing ID has no effect.
+- `void endSession(UUID sessionId, Long userId)` removes the active session only when the supplied user owns it.
 - `ActiveSession getSessionStatus(UUID sessionId, Long userId)` returns the active session after checking its owner.
 
 Example:
@@ -39,6 +40,7 @@ Example:
 ```java
 ActiveSession session = safeReturnSessionService.startSession(42L);
 Optional<ActiveSession> found = activeSessionStore.findById(session.id());
+safeReturnSessionService.endSession(session.id(), 42L);
 ```
 
 There are no HTTP endpoints or request/response formats in this scope.
@@ -47,11 +49,13 @@ There are no HTTP endpoints or request/response formats in this scope.
 
 The store uses concurrent hash maps indexed by session UUID and user ID. Its public operations synchronize access so both indexes are updated atomically, and concurrent attempts to create sessions for the same user cannot silently overwrite one another. Only one active session per user is allowed.
 
+Session termination uses the store's synchronized `removeIfOwned(UUID, Long)` operation, which checks existence and ownership and removes both indexes within one lock. A non-owner cannot remove a session. For simultaneous end requests, exactly one request succeeds; subsequent requests receive the same not-found error as an already-ended session. Ending a session releases the user's active-session slot so a new one can be started.
+
 Memory contents are lost when the application process restarts and are not shared across multiple application instances. Confirmed-risk persistence and coordination between instances require separate approved integration work.
 
 ## Database and configuration
 
-Session start and storage do not access database tables, entities, repositories, migrations, or environment variables. Database schema changes are not required.
+Session start, lookup, and termination do not access database tables, entities, repositories, migrations, or environment variables. Ending an ordinary active session only removes it from memory; it does not persist a history record. Database schema changes are not required.
 
 ## Test instructions
 
@@ -63,7 +67,9 @@ Run the targeted unit test on Windows:
 
 The tests cover saving and lookup by both identifiers, absent lookups, removal, duplicate UUID and user rejection without replacement, model null validation, session start and persistence, generated UUID and start time, invalid user IDs, duplicate starts, concurrent start attempts, owned session lookup, missing/deleted sessions, invalid lookup arguments, and rejection of another user's session.
 
-Tests executed and passed: `.\gradlew.bat test --tests "com.safepath.backend.session.service.SafeReturnSessionServiceTest" --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"` (17 tests: service 9, store 8).
+Session termination coverage additionally includes owner-only removal and removal outcomes, deletion from both indexes, new session start after ending, missing/already-ended sessions, invalid inputs, and concurrent end requests.
+
+Tests executed and passed: `.\gradlew.bat test --tests "com.safepath.backend.session.service.SafeReturnSessionServiceTest" --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"` (24 tests: service 15, store 9).
 
 ## Pending decisions
 

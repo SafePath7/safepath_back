@@ -10,6 +10,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class ActiveSessionStore {
 
+	public enum RemovalResult {
+		REMOVED,
+		NOT_FOUND,
+		NOT_OWNER
+	}
+
 	private final ConcurrentHashMap<UUID, ActiveSession> sessionsById = new ConcurrentHashMap<>();
 	private final ConcurrentHashMap<Long, UUID> sessionIdsByUserId = new ConcurrentHashMap<>();
 
@@ -47,5 +53,19 @@ public class ActiveSessionStore {
 		if (removedSession != null) {
 			sessionIdsByUserId.remove(removedSession.userId(), sessionId);
 		}
+	}
+
+	public synchronized RemovalResult removeIfOwned(UUID sessionId, Long userId) {
+		ActiveSession session = sessionsById.get(sessionId);
+		if (session == null) {
+			return RemovalResult.NOT_FOUND;
+		}
+		if (!session.userId().equals(userId)) {
+			return RemovalResult.NOT_OWNER;
+		}
+
+		sessionsById.remove(sessionId);
+		sessionIdsByUserId.remove(userId, sessionId);
+		return RemovalResult.REMOVED;
 	}
 }

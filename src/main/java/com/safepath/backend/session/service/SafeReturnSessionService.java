@@ -2,6 +2,7 @@ package com.safepath.backend.session.service;
 
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.store.ActiveSessionStore;
+import com.safepath.backend.session.store.ActiveSessionStore.RemovalResult;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -43,5 +44,22 @@ public class SafeReturnSessionService {
 		}
 
 		return session;
+	}
+
+	public void endSession(UUID sessionId, Long userId) {
+		if (sessionId == null) {
+			throw new IllegalArgumentException("sessionId must not be null");
+		}
+		if (userId == null || userId <= 0) {
+			throw new IllegalArgumentException("userId must be a positive number");
+		}
+
+		RemovalResult result = activeSessionStore.removeIfOwned(sessionId, userId);
+		switch (result) {
+			case REMOVED -> {
+			}
+			case NOT_FOUND -> throw new NoSuchElementException("Active session not found");
+			case NOT_OWNER -> throw new SecurityException("User is not the owner of this active session");
+		}
 	}
 }
