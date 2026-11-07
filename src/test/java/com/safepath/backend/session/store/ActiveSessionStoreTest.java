@@ -4,6 +4,7 @@ import com.safepath.backend.session.model.ActiveSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -27,7 +28,7 @@ class ActiveSessionStoreTest {
 
 	@Test
 	void savesAndFindsSessionByIdAndUserId() {
-		ActiveSession session = new ActiveSession(UUID.randomUUID(), 42L);
+		ActiveSession session = new ActiveSession(UUID.randomUUID(), 42L, Instant.now());
 
 		store.saveSession(session);
 
@@ -43,7 +44,7 @@ class ActiveSessionStoreTest {
 
 	@Test
 	void removesSessionAndAllowsRemovingItAgain() {
-		ActiveSession session = new ActiveSession(UUID.randomUUID(), 42L);
+		ActiveSession session = new ActiveSession(UUID.randomUUID(), 42L, Instant.now());
 		store.saveSession(session);
 
 		store.remove(session.id());
@@ -56,11 +57,11 @@ class ActiveSessionStoreTest {
 	@Test
 	void rejectsDuplicateSessionIdWithoutReplacingExistingSession() {
 		UUID sessionId = UUID.randomUUID();
-		ActiveSession existing = new ActiveSession(sessionId, 42L);
+		ActiveSession existing = new ActiveSession(sessionId, 42L, Instant.now());
 		store.saveSession(existing);
 
 		assertThrows(IllegalStateException.class,
-				() -> store.saveSession(new ActiveSession(sessionId, 43L)));
+				() -> store.saveSession(new ActiveSession(sessionId, 43L, Instant.now())));
 
 		assertEquals(existing, store.findById(sessionId).orElseThrow());
 		assertEquals(existing, store.findByUserId(42L).orElseThrow());
@@ -69,11 +70,11 @@ class ActiveSessionStoreTest {
 
 	@Test
 	void rejectsSecondActiveSessionForUserWithoutReplacingExistingSession() {
-		ActiveSession existing = new ActiveSession(UUID.randomUUID(), 42L);
+		ActiveSession existing = new ActiveSession(UUID.randomUUID(), 42L, Instant.now());
 		store.saveSession(existing);
 
 		assertThrows(IllegalStateException.class,
-				() -> store.saveSession(new ActiveSession(UUID.randomUUID(), 42L)));
+				() -> store.saveSession(new ActiveSession(UUID.randomUUID(), 42L, Instant.now())));
 
 		assertEquals(existing, store.findByUserId(42L).orElseThrow());
 	}
@@ -90,7 +91,7 @@ class ActiveSessionStoreTest {
 				results.add(executor.submit(() -> {
 					startGate.await();
 					try {
-						store.saveSession(new ActiveSession(UUID.randomUUID(), 42L));
+						store.saveSession(new ActiveSession(UUID.randomUUID(), 42L, Instant.now()));
 						return true;
 					}
 					catch (IllegalStateException exception) {
@@ -118,8 +119,9 @@ class ActiveSessionStoreTest {
 
 	@Test
 	void rejectsNullIdentifiersInSessionModel() {
-		assertThrows(NullPointerException.class, () -> new ActiveSession(null, 42L));
-		assertThrows(NullPointerException.class, () -> new ActiveSession(UUID.randomUUID(), null));
+		assertThrows(NullPointerException.class, () -> new ActiveSession(null, 42L, Instant.now()));
+		assertThrows(NullPointerException.class, () -> new ActiveSession(UUID.randomUUID(), null, Instant.now()));
+		assertThrows(NullPointerException.class, () -> new ActiveSession(UUID.randomUUID(), 42L, null));
 	}
 
 	@Test

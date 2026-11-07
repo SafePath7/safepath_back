@@ -2,15 +2,23 @@
 
 ## Purpose and scope
 
-`ActiveSessionStore` keeps ordinary active safe-return sessions in process memory. It does not use a database and does not implement session lifecycle APIs, controllers, or services.
+`ActiveSessionStore` keeps ordinary active safe-return sessions in process memory. It does not use a database or implement HTTP endpoints.
 
-The in-memory model is separate from JPA entities. It currently contains only the approved identifiers (`UUID` session ID and `Long` user ID); session state and other fields remain pending confirmation against the approved API specification.
+The in-memory model is separate from JPA entities. It contains a `UUID` session ID, `Long` user ID, and `Instant` start time. No session status is assigned because an approved status contract is not available in this checkout.
 
 ## Structure
 
 - `src/main/java/com/safepath/backend/session/model/ActiveSession.java` — immutable in-memory session model.
 - `src/main/java/com/safepath/backend/session/store/ActiveSessionStore.java` — Spring component providing in-memory operations.
+- `src/main/java/com/safepath/backend/session/service/SafeReturnSessionService.java` — session start business logic.
 - `src/test/java/com/safepath/backend/session/store/ActiveSessionStoreTest.java` — unit tests.
+- `src/test/java/com/safepath/backend/session/service/SafeReturnSessionServiceTest.java` — session start unit tests.
+
+## Starting a session
+
+`ActiveSession startSession(Long userId)` rejects null or non-positive user IDs with `IllegalArgumentException`. For a valid ID, it creates a UUID and UTC `Instant` start time, saves the new model in `ActiveSessionStore`, and returns it. The store rejects a second active session for the same user with `IllegalStateException`; the service relies on that atomic check rather than performing a separate lookup.
+
+The service validates the identifier's shape only. It does not authenticate the caller or check whether the user exists; those concerns require the approved authentication and user-service integration.
 
 ## Methods
 
@@ -22,11 +30,8 @@ The in-memory model is separate from JPA entities. It currently contains only th
 Example:
 
 ```java
-ActiveSession session = new ActiveSession(UUID.randomUUID(), 42L);
-activeSessionStore.saveSession(session);
-
+ActiveSession session = safeReturnSessionService.startSession(42L);
 Optional<ActiveSession> found = activeSessionStore.findById(session.id());
-activeSessionStore.remove(session.id());
 ```
 
 There are no HTTP endpoints or request/response formats in this scope.
@@ -39,22 +44,21 @@ Memory contents are lost when the application process restarts and are not share
 
 ## Database and configuration
 
-This store does not access database tables, entities, repositories, migrations, or environment variables. Database schema changes are not required.
+Session start and storage do not access database tables, entities, repositories, migrations, or environment variables. Database schema changes are not required.
 
 ## Test instructions
 
 Run the targeted unit test on Windows:
 
 ```powershell
-.\gradlew.bat test --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"
+.\gradlew.bat test --tests "com.safepath.backend.session.service.SafeReturnSessionServiceTest" --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"
 ```
 
-The tests cover saving and lookup by both identifiers, absent lookups, removal, duplicate UUID and user rejection without replacement, null input, and concurrent attempts to save sessions for one user.
+The tests cover saving and lookup by both identifiers, absent lookups, removal, duplicate UUID and user rejection without replacement, model null validation, session start and persistence, generated UUID and start time, invalid user IDs, duplicate starts, and concurrent start attempts.
 
-Tests executed and passed: `.\gradlew.bat test --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"` (8 tests).
+Tests executed and passed: `.\gradlew.bat test --tests "com.safepath.backend.session.service.SafeReturnSessionServiceTest" --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"` (12 tests).
 
 ## Pending decisions
 
-- Confirm the one-active-session-per-user policy against the approved API and business specification.
 - Add session state or additional fields only after those fields are approved.
 - Confirm how the store will integrate with the future session service and confirmed-risk handling.
