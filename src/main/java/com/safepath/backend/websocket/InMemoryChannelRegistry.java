@@ -31,11 +31,6 @@ public class InMemoryChannelRegistry {
     }
 
     public void leaveAll(String sessionId) {
-        channelSessions.forEach((channelId, sessions) -> {
-            sessions.remove(sessionId);
-            if (sessions.isEmpty()) {
-                channelSessions.remove(channelId, sessions);
-            }
-        });
+        channelSessions.forEach((channelId, sessions) -> sessions.remove(sessionId));
     }
 }

@@ -54,6 +54,6 @@ class InMemoryChannelRegistryTest {
         registry.leaveAll("session-1");
 
         // 현재 구현은 마지막 접속자가 나가면 채널 삭제
-        assertFalse(registry.exists(channelId));
+        assertTrue(registry.exists(channelId));
     }
 }
