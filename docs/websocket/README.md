@@ -42,7 +42,7 @@ WebSocket 모듈은 안전귀가 또는 모니터링 세션에 참여한 사용�
 | `join(String channelId, Long participantId, String sessionId)` | 허용 참여자의 WebSocket 세션을 채널에 등록한다. 채널이 없거나 참여자가 아니면 예외를 발생시킨다. |
 | `isSessionJoined(String channelId, String sessionId)` | 메시지를 보내는 WebSocket 세션이 실제로 이 채널에 입장했는지 확인한다. |
 | `leaveAll(String sessionId)` | WebSocket 연결이 끊긴 세션 ID만 모든 채널에서 제거한다. 채널과 사용자·보호자 참여 권한은 유지한다. |
-| `close(String channelId)` | 채널과 채널에 속한 모든 접속 세션 정보를 메모리에서 제거한다. 세션 종료 서비스가 호출한다. |
+| `close(String channelId)` | 채널과 채널에 속한 모든 접속 세션 정보를 메모리에서 제거한다. 세션 종료 서비스가 호출한다. 기존 STOMP 구독을 자동 해제하거나 WebSocket 연결을 강제로 끊지는 않는다. |
 
 ### WebSocket 이벤트·메시지 처리
 
@@ -75,6 +75,8 @@ WebSocket 연결 종료
   └─ channelRegistry.close(channelId)
        └─ 채널과 그 채널의 접속 세션 정보를 메모리에서 제거
 ```
+
+`close(channelId)`는 `InMemoryChannelRegistry`의 메모리 정보만 삭제한다. 이미 만들어진 STOMP 구독을 자동으로 `UNSUBSCRIBE` 처리하거나 WebSocket 연결을 종료하지는 않는다. 세션 종료 시 클라이언트에 종료 이벤트를 전달하고 클라이언트가 구독 해제/연결 종료를 처리하는 방식은 세션 연동 단계에서 별도로 구현한다.
 
 `InMemoryChannelRegistry`는 서버 메모리를 사용한다. 따라서 서버 재시작 시 모든 활성 채널이 사라진다. 현재 로컬 개발/단일 서버 단계에 맞춘 구현이며, 다중 서버 환경에서는 Redis 같은 공유 저장소 또는 메시지 브로커가 필요하다.
 
@@ -136,6 +138,174 @@ channelRegistry.close(channelId);
 
 ## 현재 테스트 방법
 
+### 현재 상태
+
+세션 시작/종료 API가 아직 WebSocket 모듈과 연동되지 않았다. 따라서 현재 정식 코드에서는 `channelRegistry.open(...)`을 호출하는 비즈니스 로직이 없고, 활성 채널도 생성되지 않는다.
+
+- 채널 생성용 WebSocket REST API는 의도적으로 없다.
+- 임시 Postman 테스트 API는 커밋 대상에서 제거됐다.
+- 따라서 **현재는 Postman으로 종단 간 채널 생성·구독·메시지 전송을 테스트할 수 없다.**
+- 현재 가능한 검증은 채널 레지스트리와 STOMP 이벤트 처리에 대한 JUnit 테스트다.
+
+### 수행한 Postman 통합 테스트 이력 및 재현 방법
+
+#### 테스트 개요
+
+실제 세션 시작 시 사용할 핵심 호출을 임시 API로 재현해 WebSocket 채널을 검증했다.
+
+```text
+실제 사용 흐름
+세션 시작 API
+→ channelRegistry.open(userId, guardianIds)
+→ channelId 반환
+→ WebSocket 연결
+
+테스트 흐름
+임시 테스트 API
+→ channelRegistry.open(1L, Set.of(2L, 3L))
+→ channelId 반환
+→ Postman WebSocket 연결
+```
+
+실제 Postman에서 확인한 결과:
+
+- 사용자 `1`, 보호자 `2`, `3`을 참여자로 하는 채널 생성
+- 사용자 `1`과 보호자 `2`의 같은 채널 구독 및 메시지 송수신
+- 보호자 `3`은 허용 참여자 목록에 포함해 채널 생성만 확인했으며, 실제 메시지 송수신은 별도로 검증하지 않았다.
+- 비허용 사용자 `99`의 구독, 메시지 수신, 메시지 전송 시도를 차단한 결과
+- WebSocket 연결 종료 시 채널은 유지하고 접속 세션만 제거
+
+세션 API 연동 전에는 `open(userId, guardianIds)`를 호출할 정식 API가 없었다. 따라서 아래의 **로컬 전용 임시 코드**를 추가해 실제 Postman 통합 테스트를 수행했다. 이 코드는 테스트가 끝난 뒤 삭제했으며, 커밋하지 않는다.
+
+#### 1. 임시 파일 추가
+
+아래 네 파일을 추가한다. 모두 `local` 프로필에서만 동작하도록 한다.
+
+`src/main/java/com/safepath/backend/websocket/dto/LocalChannelOpenRequest.java`
+
+```java
+public record LocalChannelOpenRequest(
+        @NotNull Long userId,
+        @NotEmpty Set<@NotNull Long> guardianIds
+) {
+}
+```
+
+`src/main/java/com/safepath/backend/websocket/dto/LocalChannelOpenResponse.java`
+
+```java
+public record LocalChannelOpenResponse(String channelId) {
+}
+```
+
+`src/main/java/com/safepath/backend/websocket/LocalWebSocketTestController.java`
+
+```java
+@Profile("local")
+@RestController
+@RequestMapping("/api/test/websocket/channels")
+public class LocalWebSocketTestController {
+
+    private final InMemoryChannelRegistry channelRegistry;
+
+    public LocalWebSocketTestController(InMemoryChannelRegistry channelRegistry) {
+        this.channelRegistry = channelRegistry;
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public LocalChannelOpenResponse open(@Valid @RequestBody LocalChannelOpenRequest request) {
+        return new LocalChannelOpenResponse(
+                channelRegistry.open(request.userId(), request.guardianIds())
+        );
+    }
+}
+```
+
+`src/main/java/com/safepath/backend/config/LocalWebSocketTestSecurityConfig.java`
+
+```java
+@Profile("local")
+@Configuration
+public class LocalWebSocketTestSecurityConfig {
+
+    @Bean
+    WebSecurityCustomizer localWebSocketTestWebSecurityCustomizer() {
+        return web -> web.ignoring()
+                .requestMatchers("/api/test/websocket/**");
+    }
+}
+```
+
+필요 import는 각각 `jakarta.validation`, `java.util.Set`, Spring Web annotation, Spring Security `WebSecurityCustomizer`를 추가한다. 기존 `SecurityConfig`의 `/ws`, `/ws/**` 설정은 변경하지 않는다.
+
+#### 2. Postman 채널 생성
+
+일반 HTTP 요청으로 아래를 호출한다.
+
+```text
+POST http://localhost:8080/api/test/websocket/channels
+Content-Type: application/json
+```
+
+```json
+{
+  "userId": 1,
+  "guardianIds": [2, 3]
+}
+```
+
+예상 결과는 `201 Created`와 새 UUID 채널 ID다.
+
+```json
+{
+  "channelId": "{UUID}"
+}
+```
+
+이 값을 이후 STOMP 목적지의 `{channelId}` 자리에 사용한다.
+
+#### 3. Postman STOMP 검증
+
+두 개 이상의 Postman WebSocket 연결을 열어 다음 참여자를 검증한다.
+
+| 참여자 | `participant-id` | 기대 결과 |
+| --- | ---: | --- |
+| 사용자 | `1` | 구독/메시지 전송 허용 |
+| 보호자 1 | `2` | 구독/메시지 전송 허용 |
+| 보호자 2 | `3` | 구독/메시지 전송 허용 |
+| 비허용 사용자 | `99` | 구독 및 메시지 전송 거부 |
+
+각 WebSocket 연결 주소는 `ws://localhost:8080/ws`다. 이후 Hexadecimal STOMP `CONNECT` → `SUBSCRIBE` → `SEND` 프레임을 전송한다. 아래의 [Postman Hexadecimal 프레임](#postman-hexadecimal-프레임) 섹션에서 프레임 값과 변환 방법을 확인한다.
+
+검증 완료 기준:
+
+- 실제 확인 완료: `1`과 `2`는 같은 채널에서 서로의 `MESSAGE` 프레임을 수신한다.
+- 실제 확인 완료: `99`의 구독, 메시지 수신, 메시지 전송 시도가 차단된다.
+- 보호자 `3`의 실제 메시지 송수신은 이번 Postman 테스트에서 확인하지 않았다.
+
+소스 코드의 예외 조건은 실제 Postman 수신 프레임과 구분한다.
+
+| 코드 위치 | 조건 | 서버 코드에서 정의한 예외 메시지 |
+| --- | --- | --- |
+| `InMemoryChannelRegistry.join(...)` | 채널이 없거나 `participant-id`가 허용 참여자가 아님 | `존재하지 않는 WebSocket 채널입니다.`, `채널 참여 권한이 없습니다.` |
+| `ConnectionMessageController.relay(...)` | 채널이 없거나, 해당 WebSocket 세션이 채널에 입장하지 않음 | `존재하지 않는 WebSocket 채널입니다.`, `채널에 입장하지 않은 WebSocket 세션입니다.` |
+
+위 메시지는 서버 코드가 던지는 예외 메시지다. Postman에서 어떤 STOMP `ERROR` 프레임이나 연결 상태로 보이는지는 Spring 이벤트/에러 처리 경로에 따라 별도로 확인해야 하며, 이번 테스트 결과와 동일시하지 않는다.
+
+#### 4. 테스트 코드 정리
+
+테스트가 끝나면 다음 파일을 삭제한다.
+
+```text
+LocalWebSocketTestController.java
+LocalChannelOpenRequest.java
+LocalChannelOpenResponse.java
+LocalWebSocketTestSecurityConfig.java
+```
+
+이후 `/api/test/websocket/channels` 엔드포인트와 테스트 전용 보안 예외도 함께 사라진다. 정식 채널 생성은 세션 시작 서비스가 `channelRegistry.open(...)`을 호출해 처리한다.
+
 ### JUnit 전체 테스트
 
 현재 정식 코드만으로는 세션 API가 채널을 열지 않으므로, 채널 관리 검증은 JUnit으로 수행한다.
@@ -162,9 +332,9 @@ BUILD SUCCESSFUL
 - 세션 종료 시 `close(channelId)`로 채널 삭제
 - STOMP 구독·연결 종료 이벤트 처리
 
-### Postman/STOMP 통합 테스트
+### 세션 API 연동 후 Postman/STOMP 통합 테스트 참고
 
-정식 통합 테스트에는 세션 시작 API가 먼저 필요하다. 세션 시작 API가 `channelRegistry.open(1L, Set.of(2L, 3L))`을 호출하고 응답에 `channelId`를 전달하도록 합쳐진 뒤 아래 절차로 테스트한다.
+아래 절차는 현재 실행하는 테스트가 아니다. 세션 시작 API가 `channelRegistry.open(1L, Set.of(2L, 3L))`을 호출하고 응답에 `channelId`를 전달하도록 합쳐진 뒤 사용한다.
 
 테스트 참여자 데이터:
 
