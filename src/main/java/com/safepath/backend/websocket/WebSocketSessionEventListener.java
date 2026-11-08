@@ -28,7 +28,12 @@ public class WebSocketSessionEventListener {
         }
 
         String channelId = destination.substring(CHANNEL_TOPIC_PREFIX.length());
-        channelRegistry.join(channelId, sessionId);
+        String participantIdHeader = accessor.getFirstNativeHeader("participant-id");
+        if (participantIdHeader == null) {
+            throw new IllegalArgumentException("participant-id 헤더는 필수입니다.");
+        }
+
+        channelRegistry.join(channelId, Long.valueOf(participantIdHeader), sessionId);
     }
 
     @EventListener

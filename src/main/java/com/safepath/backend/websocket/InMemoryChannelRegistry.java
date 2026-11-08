@@ -10,27 +10,61 @@ import java.util.concurrent.ConcurrentMap;
 @Component
 public class InMemoryChannelRegistry {
 
-    private final ConcurrentMap<String, Set<String>> channelSessions = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Channel> channels = new ConcurrentHashMap<>();
 
-    public String create() {
+    public String open(Long userId, Set<Long> guardianIds) {
+        if (userId == null || guardianIds == null) {
+            throw new IllegalArgumentException("사용자와 보호자 정보는 필수입니다.");
+        }
+
+        Set<Long> participantIds = ConcurrentHashMap.newKeySet();
+        participantIds.add(userId);
+        participantIds.addAll(guardianIds);
+
         String channelId = UUID.randomUUID().toString();
-        channelSessions.put(channelId, ConcurrentHashMap.newKeySet());
+        channels.put(channelId, new Channel(participantIds));
         return channelId;
     }
 
     public boolean exists(String channelId) {
-        return channelSessions.containsKey(channelId);
+        return channels.containsKey(channelId);
     }
 
-    public void join(String channelId, String sessionId) {
-        Set<String> sessions = channelSessions.get(channelId);
-        if (sessions == null) {
+    public boolean isParticipant(String channelId, Long participantId) {
+        Channel channel = channels.get(channelId);
+        return channel != null && participantId != null && channel.participantIds().contains(participantId);
+    }
+
+    public void join(String channelId, Long participantId, String sessionId) {
+        Channel channel = channels.get(channelId);
+        if (channel == null) {
             throw new IllegalArgumentException("존재하지 않는 WebSocket 채널입니다.");
         }
-        sessions.add(sessionId);
+        if (!channel.participantIds().contains(participantId)) {
+            throw new IllegalArgumentException("채널 참여 권한이 없습니다.");
+        }
+        channel.sessions().put(sessionId, participantId);
+    }
+
+    public boolean isSessionJoined(String channelId, String sessionId) {
+        Channel channel = channels.get(channelId);
+        return channel != null && channel.sessions().containsKey(sessionId);
     }
 
     public void leaveAll(String sessionId) {
-        channelSessions.forEach((channelId, sessions) -> sessions.remove(sessionId));
+        channels.forEach((channelId, channel) -> channel.sessions().remove(sessionId));
+    }
+
+    public void close(String channelId) {
+        channels.remove(channelId);
+    }
+
+    private record Channel(
+            Set<Long> participantIds,
+            ConcurrentMap<String, Long> sessions
+    ) {
+        private Channel(Set<Long> participantIds) {
+            this(Set.copyOf(participantIds), new ConcurrentHashMap<>());
+        }
     }
 }

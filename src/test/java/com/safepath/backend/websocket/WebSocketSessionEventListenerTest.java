@@ -27,6 +27,7 @@ class WebSocketSessionEventListenerTest {
 
         accessor.setSessionId("session-1");
         accessor.setDestination("/topic/connections/abc123");
+        accessor.setNativeHeader("participant-id", "10");
 
         Message<byte[]> message = MessageBuilder.createMessage(
                 new byte[0],
@@ -38,7 +39,7 @@ class WebSocketSessionEventListenerTest {
 
         listener.handleSubscribe(event);
 
-        verify(registry).join("abc123", "session-1");
+        verify(registry).join("abc123", 10L, "session-1");
     }
 
     @Test
