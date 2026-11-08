@@ -14,12 +14,14 @@ SafePath는 안전귀가를 지원하기 위한 캡스톤 프로젝트입니다.
 
 Spring Boot 기본 골격, DB 프로필, Docker PostgreSQL과 7개 테이블을 정의한 Flyway V1이 준비되어 있습니다. V1은 기존 로컬 DB에서 적용·검증했으며, 새로운 로컬 DB에는 앱 시작 시 적용됩니다. 기본 애플리케이션 컨텍스트 테스트가 있습니다.
 
-도메인 엔티티와 API, 인증 연동, 안전귀가 및 위험 감지 기능은 아직 구현되지 않았습니다.
+기능 구현은 보호자 등록·권한과 위치·위험 이벤트·미디어 브랜치로 분리했습니다. 현재 체크아웃한 브랜치의 구현 범위와 테스트 방법은 [기능별 API 안내](docs/api/README.md)를 참고하세요.
+
+위치 데이터의 Flyway V2는 위험 이벤트 브랜치에 포함합니다. 명세의 JWT 인증에는 공통 담당자의 `FirebaseIdTokenVerifier`를 연결해야 하며 검증 모듈이 없으면 실제 요청은 401로 차단됩니다. API 요청에는 기존 회원 데이터가, 위치·이벤트 요청에는 세션 행도 필요합니다.
 
 ## 로컬 개발 시작
 
 1. JDK 21과 Docker Desktop을 준비하고 Docker 엔진을 실행합니다.
-2. 프로젝트 루트에서 `.env.example`을 `.env`로 복사하고 `POSTGRES_PASSWORD`를 로컬 전용 값으로 변경합니다. `POSTGRES_DB=safepath`를 유지합니다.
+2. 프로젝트 루트에서 `.env.example`을 `.env`로 복사합니다. 예시 파일에는 변수명과 빈 값만 있으므로 `POSTGRES_DB`는 `safepath`, `POSTGRES_USER`는 로컬 계정명, `POSTGRES_PASSWORD`는 로컬 전용 비밀번호로 입력합니다. `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`는 `dev` 프로필용이므로 로컬에서는 비워 둡니다. 기존 `.env`가 있으면 덮어쓰지 않습니다.
 3. `docker compose up -d`로 DB를 시작하고 `docker compose ps`에서 healthy 상태를 확인합니다.
 4. IntelliJ 실행 설정에서 `local` 프로필을 활성화하고 `.env`와 같은 `POSTGRES_USER`, `POSTGRES_PASSWORD`를 환경변수로 설정합니다. Compose의 `.env`는 Spring 프로세스에 자동 전달되지 않습니다.
 5. `BackendApplication`을 실행합니다. 로컬 DB는 `localhost:5433/safepath`이며 Flyway 자동 실행과 JPA `ddl-auto=validate`가 적용됩니다. 앱의 기본 주소는 `http://localhost:8080`입니다.
@@ -47,13 +49,16 @@ Windows PowerShell 명령과 환경변수 설정은 [Docker 문서](docs/docker/
 
 ## GitHub 협업
 
-- `main`은 안정적인 통합 코드를 유지하고 `feature/*` 브랜치에서 기능별로 작업합니다.
-- Pull Request를 통해 코드를 검토하고 병합합니다.
-- 적용 이력이 있는 V1 SQL은 임의로 수정하지 않습니다. 스키마 변경은 V2, V3 등 새로운 마이그레이션으로 작성합니다.
-- `.env`, DB 비밀번호, AWS 자격 증명은 Git에 업로드하지 않습니다.
+- `main`, `develop`에서 직접 작업하지 않습니다. 최신 `origin/develop` 기준으로 `feature/기능명`, `fix/버그명`, `refactor/대상명`, `docs/문서명` 브랜치를 생성합니다.
+- 커밋은 `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `chore:` 접두사로 변경 목적을 설명합니다.
+- 기능 브랜치를 원격에 올리고 `develop`을 대상으로 Pull Request를 생성합니다. PR에는 구현 내용, 테스트 방법, 변경 사항 요약을 작성합니다. 검토·병합 후 작업 브랜치를 삭제합니다.
+- 공통 API 요청·응답과 DB 테이블·컬럼을 임의로 변경하지 않습니다. 변경이 필요하면 팀에 공유하고 담당자가 반영합니다. 적용된 마이그레이션은 수정하지 않습니다.
+- `.env`와 `.env.*`, DB 비밀번호, AWS 자격 증명은 Git에 업로드하지 않습니다. `.env.example`만 예외로 추적하며 변수명과 빈 값만 작성합니다. 환경변수 추가 시 설정 방법을 문서와 PR에 설명합니다.
+- 역할이 드러나는 영문 이름을 사용하고 반복 고정값은 상수로 관리합니다. 사용하지 않는 코드·import, 디버그 출력, 불필요하게 주석 처리한 코드는 커밋 전에 정리합니다.
 
 ## 세부 문서
 
+- [기능별 API 안내](docs/api/README.md)
 - [아키텍처](docs/architecture/README.md)
 - [데이터베이스와 Flyway](docs/database/README.md)
 - [Docker 로컬 개발 환경](docs/docker/README.md)
