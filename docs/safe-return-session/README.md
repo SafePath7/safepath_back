@@ -72,13 +72,21 @@ Session termination coverage additionally includes owner-only removal and remova
 ### Test results and current limitations
 
 - Command: `.\gradlew.bat test`
-- Result: **25 tests total: 24 passed, 1 failed, 0 skipped.**
-- Failed test: `BackendApplicationTests.contextLoads()`. Spring context initialization fails because the default profile has no DataSource URL configured (`Failed to determine a suitable driver class`).
-- The session service tests (15) and store tests (9) all passed.
-- Connecting to the local PostgreSQL environment and rerunning the complete test suite remain follow-up work.
-- Flyway schema management and the Hibernate `ddl-auto` setting will be confirmed with the database-owning team before applying any related configuration.
+- Result: **25 tests total: 25 passed, 0 failed, 0 errors, 0 skipped.**
+- `SafeReturnSessionServiceTest`: 15 passed.
+- `ActiveSessionStoreTest`: 9 passed.
+- `BackendApplicationTests.contextLoads()`: 1 passed.
+- Spring Boot started successfully with the `local` profile and connected to Docker PostgreSQL.
+- Flyway V1 migration was applied successfully.
+- The earlier `contextLoads()` failure occurred because the default profile had no DataSource URL. It passed after running the tests with the `local` profile and database environment variables configured.
 
-The full test suite is **not fully passing**. Its context-load test remains blocked by the default-profile database configuration; the session unit-test results above are separate from that limitation.
+### Implementation status
+
+- The in-memory session store and `SafeReturnSessionService` implementation are complete.
+- The REST Controller is not implemented.
+- Firebase authentication and mapping Firebase UID to the internal `users.id` (`Long`) are planned for the database team; they are not implemented here.
+- The common error handler remains on hold as STEP 6-5 pending team agreement.
+- Draft PR #2 is awaiting team review and merge.
 
 ## Pending decisions
 
