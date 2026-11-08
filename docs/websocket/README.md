@@ -134,46 +134,6 @@ channelRegistry.close(channelId);
 
 > 현재 `participant-id` 헤더는 개발용 검증 수단이다. 실서비스에서는 JWT, 웹 링크의 접근 ticket 등 서버가 검증한 인증 정보를 사용해 참여자 ID를 결정해야 한다. 클라이언트가 직접 보낸 ID 헤더를 신뢰해서는 안 된다.
 
-## 로컬 실행 준비
-
-### 1. Docker PostgreSQL 실행
-
-프로젝트 루트에서 `.env.example`을 `.env`로 복사하고, Docker용 비밀번호를 설정한다. `.env`는 Git에 올리지 않는다.
-
-```powershell
-Copy-Item .env.example .env
-docker compose up -d
-docker compose ps
-```
-
-`postgres` 서비스가 `healthy`인지 확인한다.
-
-### 2. Spring Boot 실행
-
-IntelliJ 실행 설정 또는 터미널에 다음 환경값을 설정한다.
-
-```text
-SPRING_PROFILES_ACTIVE=local
-POSTGRES_USER=<.env의 POSTGRES_USER>
-POSTGRES_PASSWORD=<.env의 POSTGRES_PASSWORD>
-```
-
-PowerShell 예시:
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE = "local"
-$env:POSTGRES_USER = "<.env의 POSTGRES_USER>"
-$env:POSTGRES_PASSWORD = "<.env의 POSTGRES_PASSWORD>"
-.\gradlew.bat bootRun
-```
-
-서버 로그에 다음 내용이 보이면 준비가 완료된 것이다.
-
-```text
-The following 1 profile is active: "local"
-Tomcat started on port 8080
-```
-
 ## 현재 테스트 방법
 
 ### JUnit 전체 테스트
