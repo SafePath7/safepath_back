@@ -1,5 +1,7 @@
-package com.safepath.backend.session.controller;
+package com.safepath.backend.session.exception;
 
+import com.safepath.backend.session.controller.SafeReturnSessionController;
+import com.safepath.backend.session.dto.SessionApiErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -8,8 +10,6 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-
-import com.safepath.backend.session.dto.SessionApiErrorResponse;
 
 import java.util.NoSuchElementException;
 

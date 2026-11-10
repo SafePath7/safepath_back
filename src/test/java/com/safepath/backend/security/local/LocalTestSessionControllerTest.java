@@ -1,7 +1,7 @@
 package com.safepath.backend.security.local;
 
 import com.safepath.backend.session.controller.SafeReturnSessionController;
-import com.safepath.backend.session.controller.SafeReturnSessionExceptionHandler;
+import com.safepath.backend.session.exception.SafeReturnSessionExceptionHandler;
 import com.safepath.backend.session.service.SafeReturnSessionService;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import tools.jackson.databind.JsonNode;

@@ -12,7 +12,7 @@
 - `src/main/java/com/safepath/backend/session/store/ActiveSessionStore.java` — 메모리 저장 및 조회 기능을 제공하는 Spring 컴포넌트
 - `src/main/java/com/safepath/backend/session/service/SafeReturnSessionService.java` — 세션 시작, 활성 세션 조회, 종료 비즈니스 로직
 - `src/main/java/com/safepath/backend/session/controller/SafeReturnSessionController.java` — REST API 요청 처리
-- `src/main/java/com/safepath/backend/session/controller/SafeReturnSessionExceptionHandler.java` — 세션 API 예외 처리
+- `src/main/java/com/safepath/backend/session/exception/SafeReturnSessionExceptionHandler.java` — 세션 Controller 범위 예외 처리
 - `src/main/java/com/safepath/backend/session/dto/ActiveSessionResponse.java` — 활성 세션 응답 DTO
 - `src/main/java/com/safepath/backend/session/dto/SessionApiErrorResponse.java` — 오류 응답 DTO
 - `src/test/java/com/safepath/backend/session/store/ActiveSessionStoreTest.java` — 저장소 단위 테스트
@@ -28,15 +28,15 @@
 
 ## REST API
 
-로컬 테스트 인증 모드에서는 인증된 `LocalTestUserPrincipal`에서 `Long userId`를 가져옵니다. 요청 본문, 쿼리 파라미터, 임의의 헤더에 담긴 사용자 ID는 신원 확인에 사용하지 않습니다. Firebase 인증 및 UID 매핑은 이 기능에 포함되지 않습니다.
+현재 인증은 Postman 및 로컬 검증에만 쓰는 임시 HTTP Basic 테스트 인증입니다. `local`과 `local-test-auth` 프로필이 모두 활성화된 경우에만 사용할 수 있으며, 정식 사용자 인증으로 사용하면 안 됩니다. 테스트 모드에서는 인증된 `LocalTestUserPrincipal`에서 `Long userId`를 가져옵니다. 요청 본문, 쿼리 파라미터, 임의의 헤더에 담긴 사용자 ID는 신원 확인에 사용하지 않습니다. Firebase 인증 및 UID 매핑은 아직 연결되지 않았습니다.
 
-| HTTP Method 및 경로 | 동작 | 성공 응답 |
-|---|---|---|
-| `POST /api/safe-return/sessions` | 인증된 사용자의 활성 메모리 세션 시작 | `201 Created` |
-| `GET /api/safe-return/sessions/{sessionId}/status` | 인증된 사용자가 소유한 활성 세션 조회 | `200 OK` |
-| `PATCH /api/safe-return/sessions/{sessionId}/end` | 인증된 사용자가 소유한 활성 세션 종료 및 제거 | `204 No Content` |
+| API 이름 | HTTP Method 및 경로 | Request JSON | 성공 Response JSON |
+|---|---|---|---|
+| 세션 시작 | `POST /api/safe-return/sessions` | 없음 | `201 Created`, 아래 세션 JSON |
+| 세션 상태 조회 | `GET /api/safe-return/sessions/{sessionId}/status` (`sessionId`: UUID) | 없음 | `200 OK`, 아래 세션 JSON |
+| 세션 종료 | `PATCH /api/safe-return/sessions/{sessionId}/end` (`sessionId`: UUID) | 없음 | `204 No Content`, body 없음 |
 
-세션 시작 및 조회 응답에는 현재 메모리 API 명세에 정의된 필드만 포함됩니다.
+세션 시작 및 조회 응답의 필드와 Java 자료형은 `id: UUID`, `startedAt: Instant`입니다. JSON에서는 각각 문자열로 직렬화됩니다. `userId` 및 `status` 필드는 포함하지 않습니다.
 
 ```json
 {
@@ -47,21 +47,28 @@
 
 `ActiveSession` 모델에 상태값이 없으므로 `status` 필드는 반환하지 않습니다.
 
-현재 Controller 범위의 오류 응답 형식은 `{ "code": "...", "message": "..." }`입니다.
+현재 `session.exception.SafeReturnSessionExceptionHandler`는 `@RestControllerAdvice(assignableTypes = SafeReturnSessionController.class)`로 세션 Controller에만 적용됩니다. 오류 JSON은 `{ "code": String, "message": String }` 형식입니다.
 
-| HTTP 상태 코드 | 발생 상황 |
-|---|---|
-| `400 Bad Request` | UUID 형식 오류 또는 잘못된 요청 |
-| `401 Unauthorized` | 인증 누락 또는 지원되지 않는 인증 |
-| `404 Not Found` | 세션 없음, 이미 종료됨, 또는 소유자가 다름 |
-| `409 Conflict` | 동일 사용자의 활성 세션 중복 시작 |
-| `500 Internal Server Error` | 예상하지 못한 서버 오류(내부 예외 상세 내용은 노출하지 않음) |
+```json
+{
+  "code": "SESSION_NOT_FOUND",
+  "message": "The active session was not found."
+}
+```
 
-소유권 불일치에 대한 `404` 응답은 현재 임시 정책이며, 최종 응답 명세는 팀 합의가 필요합니다. Controller 전용 예외 처리기는 공통 오류 응답 명세가 확정된 뒤 통합할 수 있습니다.
+| HTTP 상태 코드 | 오류 코드 | 발생 상황 |
+|---|---|---|
+| `400 Bad Request` | `INVALID_SESSION_ID` 또는 `INVALID_REQUEST` | UUID 형식 오류 또는 잘못된 요청 |
+| `401 Unauthorized` | `UNAUTHENTICATED` | 인증 누락 또는 지원되지 않는 인증 |
+| `404 Not Found` | `SESSION_NOT_FOUND` | 세션 없음, 이미 종료됨, 또는 소유자가 다름 |
+| `409 Conflict` | `ACTIVE_SESSION_CONFLICT` | 동일 사용자의 활성 세션 중복 시작 |
+| `500 Internal Server Error` | `INTERNAL_ERROR` | 예상하지 못한 서버 오류(내부 예외 상세 내용은 노출하지 않음) |
+
+소유권 불일치에 대한 `404` 응답은 현재 구현 정책이며, 최종 상태 코드 및 오류 정책에 대한 팀 합의가 필요합니다.
 
 ### Postman 요청 예시
 
-Postman에서는 Basic Auth를 사용하며, 요청에 사용자 ID를 별도로 넣지 않습니다.
+아래 Basic Auth 예시는 `local,local-test-auth` 프로필의 임시 로컬 테스트에만 해당합니다. 운영 및 Dev 인증 방식이 아니며, 정식 Firebase 인증은 아직 구현되지 않았습니다. 요청에 사용자 ID를 별도로 넣지 않습니다.
 
 ```http
 POST http://127.0.0.1:8080/api/safe-return/sessions
@@ -89,7 +96,7 @@ Authorization: Basic <로컬 테스트 인증 정보>
 - `void endSession(UUID sessionId, Long userId)` — 소유자가 일치할 때만 활성 세션 제거. 입력값이 유효하지 않으면 `IllegalArgumentException`, 세션이 없거나 이미 종료되었으면 `NoSuchElementException`, 다른 사용자의 세션이면 `SecurityException` 발생
 - `ActiveSession getSessionStatus(UUID sessionId, Long userId)` — 소유권을 검사한 후 활성 세션 반환
 - `removeIfOwned(UUID, Long)` — 저장소에서 존재 여부 및 소유권을 확인하고 두 인덱스에서 세션 제거
-- `SafeReturnSessionController` — 세 가지 REST 엔드포인트를 제공하며, 인증된 `LocalTestUserPrincipal`에서 호출자 ID 획득
+- `SafeReturnSessionController` — 세 가지 REST 엔드포인트를 제공하며, 현재 임시 로컬 테스트 인증의 `LocalTestUserPrincipal`에서 호출자 ID 획득
 
 사용 예시:
 
@@ -194,17 +201,17 @@ Windows에서 세션 서비스 및 저장소 단위 테스트 실행:
 
 ### 최근 컴파일 확인
 
-- 실행 명령어: `.\gradlew compileJava`
-- 결과: **BUILD SUCCESSFUL** (2026-11-09)
-- `SessionApiErrorResponse`를 `session.dto` 패키지로 이동하고 관련 import를 수정한 후 Java 컴파일 성공
+- 실행 명령어: `.\gradlew.bat compileJava` 및 세션 Controller, Service, Store 선택 테스트
+- 결과: **컴파일 성공; 선택 테스트 36개 통과, 실패·오류 0개** (2026-11-10)
+- Exception Handler를 `session.exception`으로 이동하고 테스트 import를 수정한 후 검증
 
 ## 현재 구현 상태
 
 - 메모리 기반 세션 저장소와 `SafeReturnSessionService` 구현 완료
 - `SafeReturnSessionController`에서 세 가지 REST API를 기존 Service에 연결하고, 인증된 로컬 테스트 Principal에서 사용자 ID 획득
-- Controller 전용 예외 처리에서 소유권 불일치를 임시로 `404`에 매핑. 최종 상태 코드 및 오류 응답 형식은 팀과 합의 필요
+- `session.exception.SafeReturnSessionExceptionHandler`가 세션 Controller에만 적용되며 현재 오류 코드 및 JSON 응답을 처리
+- 소유권 불일치의 `404` 정책 최종 확인은 팀 합의 필요
 - Firebase 인증 및 Firebase UID를 내부 `users.id` (`Long`)로 매핑하는 기능은 DB 담당 팀과의 연동 예정이며 현재 미구현
-- 공통 오류 처리기는 팀 합의 전까지 STEP 6-5에서 보류
 - Draft PR #2는 팀 리뷰 및 병합 대기 중
 
 ## 추후 결정 사항
