@@ -2,13 +2,12 @@
 
 ## 준비와 실행
 
-Docker Desktop을 설치하고 Docker 엔진을 실행합니다. 프로젝트 루트에서 `.env.example`을 `.env`로 복사하고 빈 값을 채웁니다. `POSTGRES_DB`는 `safepath`, `POSTGRES_USER`는 로컬 계정명, `POSTGRES_PASSWORD`는 로컬 전용 비밀번호입니다. `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`는 `dev` 프로필용으로 로컬에서는 비워 둡니다.
+Docker Desktop을 설치하고 Docker 엔진을 실행합니다. 프로젝트 루트에서 `.env.example`을 `.env`로 복사하고 로컬 전용 비밀번호를 지정합니다.
 
 macOS/Linux:
 
 ```sh
 cp .env.example .env
-# .env의 POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD를 입력한 후 실행합니다.
 docker compose up -d
 docker compose ps
 ```
@@ -21,7 +20,7 @@ Docker Desktop을 실행하고 프로젝트 루트 PowerShell에서 아래 명�
 
 ```powershell
 Copy-Item .env.example .env
-# .env의 POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD를 입력합니다.
+# .env를 편집해 로컬 전용 POSTGRES_PASSWORD를 지정합니다.
 docker compose up -d
 docker compose ps
 ```
