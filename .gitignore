@@ -1,6 +1,8 @@
 HELP.md
 .gradle
 build/
+firebase-service-account*.json
+**/firebase-service-account*.json
 .env
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
