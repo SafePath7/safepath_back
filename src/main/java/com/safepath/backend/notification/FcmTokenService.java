@@ -36,4 +36,19 @@ public class FcmTokenService {
 			throw new IllegalArgumentException("User does not exist: " + userId);
 		}
 	}
+
+	@Transactional
+	public boolean registerByFirebaseUid(String firebaseUid, String fcmToken) {
+		if (firebaseUid == null || firebaseUid.isBlank()) {
+			throw new IllegalArgumentException("firebaseUid must not be blank.");
+		}
+		if (fcmToken == null || fcmToken.isBlank()) {
+			throw new IllegalArgumentException("fcmToken must not be blank.");
+		}
+
+		return jdbcTemplate.update(
+				"UPDATE users SET fcm_token = ?, updated_at = CURRENT_TIMESTAMP WHERE firebase_uid = ?",
+				fcmToken,
+				firebaseUid) > 0;
+	}
 }

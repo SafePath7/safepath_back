@@ -1,9 +1,13 @@
 package com.safepath.backend.config;
 
+import com.safepath.backend.auth.FirebaseAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
@@ -12,15 +16,17 @@ public class SecurityConfig {
 
     // 로그인 요청, 웹소켓 요청은 인증 없이 접근 가능 / 그 외 요청은 인증 필요
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, FirebaseAuthenticationFilter firebaseAuthenticationFilter) throws Exception {
         RequestMatcher login = request -> HttpMethod.POST.matches(request.getMethod())
                 && "/api/auth/login".equals(request.getServletPath());
         return http
-                .csrf(csrf -> csrf.ignoringRequestMatchers(login))
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(login).permitAll()
                         .requestMatchers("/ws", "/ws/**").permitAll()
                         .anyRequest().authenticated())
+                .addFilterBefore(firebaseAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
 }
