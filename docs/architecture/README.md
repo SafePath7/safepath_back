@@ -1,19 +1,18 @@
 # 백엔드 아키텍처
 
-## 현재 구조
+## 기능별 구성
 
-`src/main/java/com/safepath/backend`에는 Spring Boot 진입점인 `BackendApplication`이 있습니다. `src/main/resources`는 공통 및 환경별 설정과 Flyway SQL을, `src/test`는 애플리케이션 컨텍스트 테스트를 보관합니다. 빌드 의존성은 [build.gradle](../../build.gradle)에 정의되어 있습니다.
+`develop`을 기준으로 다음 두 기능 브랜치를 독립적으로 검토합니다. 양쪽은 같은 공통 인증·오류 처리 커밋을 공유합니다.
 
-Spring Boot는 향후 앱 요청을 처리하고 비즈니스 로직과 DB 접근을 담당할 백엔드입니다. PostgreSQL은 사용자, 보호자 연결, 안전귀가 세션 등의 데이터를 저장하도록 설계되어 있습니다. 현재는 로컬 DB와 스키마가 준비되어 있으며 백엔드의 도메인 접근 로직은 아직 없습니다.
+| 브랜치 | 패키지 | API |
+|---|---|---|
+| `feature/guardian-registration-api` | `guardian` | 보호자 등록·상태·권한 7개 |
+| `feature/risk-event-api` | `risk` | 위치·위험 이벤트·미디어 7개 |
 
-```text
-앱 ── 요청/응답 ──> Spring Boot 백엔드 ── JDBC/JPA ──> PostgreSQL
-       향후 구현          현재 기본 골격                 V1 스키마
-```
+공통 `security`는 검증된 Firebase UID와 관리자 권한을 전달하고 `common`은 오류 응답을 처리합니다. Firebase 서명·만료 검증 구현체는 공통 담당 모듈을 연결해야 합니다.
 
-## 구현 상태와 계획
+도메인별 Controller → Service → Repository 구조로 요청을 처리하고 `JdbcTemplate`으로 PostgreSQL에 접근합니다. 쓰기는 트랜잭션과 필요한 행 잠금을 사용합니다. 위험 이벤트 브랜치의 위치 조회는 DB의 기존 보호자 연결 상태·위치 조회 권한만 읽으므로 보호자 API 클래스에 의존하지 않습니다.
 
-- **완료:** Spring Boot 기본 골격, DB 프로필, Docker PostgreSQL 구성, Flyway V1 스키마와 로컬 적용 검증, 기본 컨텍스트 테스트.
-- **향후 계획:** 도메인 엔티티와 저장소, API와 비즈니스 로직, 인증 연동, 앱과의 통신, 안전귀가 및 위험 상황 처리, 배포 구성. 구체적인 구현과 운영 정책은 추가 설계가 필요합니다.
+V1의 공통 테이블 정의는 변경하지 않습니다. 위치 테이블 V2와 비공개 파일 저장소는 위험 이벤트 브랜치에만 포함됩니다. 미디어 파일 처리와 DB 실패 보상 동작은 해당 브랜치의 문서와 테스트에서 설명합니다.
 
-자세한 DB 구조는 [데이터베이스 문서](../database/README.md)를 참고합니다.
+API 범위와 실행·검증 방법은 [기능별 API 안내](../api/README.md), 테이블 정의는 [DB 문서](../database/README.md)를 참고하세요.
