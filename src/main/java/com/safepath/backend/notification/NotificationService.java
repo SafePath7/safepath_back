@@ -114,6 +114,34 @@ public class NotificationService {
 		}
 	}
 
+	/**
+	 * Sends a reminder three days before risk-event media is scheduled for deletion.
+	 * The scheduler will later decide when to invoke this method.
+	 */
+	public NotificationResult sendDeletionReminderNotification(long userId) {
+		Optional<String> fcmToken = findFcmTokenByUserId(userId);
+		if (fcmToken.isEmpty() || fcmToken.get().isBlank()) {
+			return new NotificationResult(0, 0);
+		}
+
+		Message message = Message.builder()
+				.setToken(fcmToken.get())
+				.setNotification(Notification.builder()
+						.setTitle("데이터 삭제 예정 안내")
+						.setBody("위험 상황 관련 음성 및 사진 데이터가 3일 후 자동 삭제됩니다.")
+						.build())
+				.putAllData(Map.of("type", "DELETION_REMINDER", "userId", String.valueOf(userId)))
+				.build();
+
+		try {
+			FirebaseMessaging.getInstance().send(message);
+			return new NotificationResult(1, 0);
+		} catch (FirebaseMessagingException e) {
+			log.warn("Failed to send deletion reminder notification. userId={}", userId, e);
+			return new NotificationResult(0, 1);
+		}
+	}
+
 	private Optional<Sender> findSender(String firebaseUid) {
 		return jdbcTemplate.query(
 				"SELECT id, name FROM users WHERE firebase_uid = ?",
@@ -143,6 +171,13 @@ public class NotificationService {
 						rs.getString("requester_name"), rs.getString("fcm_token")), guardianId, requesterId)
 				.stream()
 				.findFirst();
+	}
+
+	private Optional<String> findFcmTokenByUserId(long userId) {
+		return jdbcTemplate.queryForList(
+				"SELECT fcm_token FROM users WHERE id = ? AND fcm_token IS NOT NULL AND fcm_token <> ''",
+				String.class,
+				userId).stream().findFirst();
 	}
 
 	private record Sender(long id, String name) {
