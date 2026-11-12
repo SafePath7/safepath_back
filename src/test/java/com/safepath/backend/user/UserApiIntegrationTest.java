@@ -115,4 +115,96 @@ class UserApiIntegrationTest {
         assertEquals(409, request("POST", "/api/users/me/registration", "other", "{}").statusCode());
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM users WHERE firebase_uid = ?", Integer.class, otherUid));
     }
+
+    @Test
+    void updatesOwnProfileAndOnlyAcceptsTheFirebaseLinkedPhone() throws Exception {
+        when(tokens.verifyIdToken("valid")).thenReturn(uid);
+        assertEquals(401, request("PATCH", "/api/users/me", null, "{\"name\":\"New name\"}").statusCode());
+        assertEquals(404, request("PATCH", "/api/users/me", "valid", "{\"name\":\"New name\"}").statusCode());
+        when(accounts.getAccount(uid)).thenReturn(new FirebaseAccountService.Account(
+                "Original name", uid + "@example.com", "+16505550100"));
+        assertEquals(201, request("POST", "/api/users/me/registration", "valid", "{}").statusCode());
+
+        jdbc.update("UPDATE users SET updated_at = TIMESTAMP '2000-01-01' WHERE firebase_uid = ?", uid);
+        assertEquals(400, request("PATCH", "/api/users/me", "valid", "{\"name\":\"  \"}").statusCode());
+        assertEquals(204, request("PATCH", "/api/users/me", "valid", "{\"name\":\" New name \"}").statusCode());
+        assertTrue(jdbc.queryForObject(
+                "SELECT updated_at > TIMESTAMP '2000-01-01' FROM users WHERE firebase_uid = ?", Boolean.class, uid));
+
+        when(accounts.getLinkedPhoneNumber(uid)).thenReturn("+16505550101");
+        assertEquals(503, request("PATCH", "/api/users/me/phone", "valid",
+                "{\"phoneNumber\":\"+16505550102\"}").statusCode());
+        var before = json.readTree(request("GET", "/api/users/me", "valid", null).body());
+        assertEquals("+16505550100", before.get("phoneNumber").asText());
+        String oldHash = jdbc.queryForObject("SELECT phone_hash FROM users WHERE firebase_uid = ?", String.class, uid);
+        jdbc.update("UPDATE users SET updated_at = TIMESTAMP '2000-01-01' WHERE firebase_uid = ?", uid);
+
+        assertEquals(503, request("PATCH", "/api/users/me/phone", "valid",
+                "{\"phoneNumber\":\"+16505550101\"}").statusCode());
+        var profile = json.readTree(request("GET", "/api/users/me", "valid", null).body());
+        assertEquals("New name", profile.get("name").asText());
+        assertEquals("+16505550100", profile.get("phoneNumber").asText());
+        assertEquals(oldHash, jdbc.queryForObject("SELECT phone_hash FROM users WHERE firebase_uid = ?", String.class, uid));
+        assertFalse(jdbc.queryForObject(
+                "SELECT updated_at > TIMESTAMP '2000-01-01' FROM users WHERE firebase_uid = ?", Boolean.class, uid));
+    }
+
+    @Test
+    void withdrawsOnlyTheCurrentUserAndTheirSessions() throws Exception {
+        String guardianUid = uid + "-guardian";
+        UUID sessionId = UUID.randomUUID();
+        when(tokens.verifyIdToken("valid")).thenReturn(uid);
+        when(tokens.verifyIdToken("guardian")).thenReturn(guardianUid);
+        when(accounts.getAccount(uid)).thenReturn(new FirebaseAccountService.Account(
+                "Member", uid + "@example.com", "+16505550103"));
+        when(accounts.getAccount(guardianUid)).thenReturn(new FirebaseAccountService.Account(
+                "Guardian", guardianUid + "@example.com", "+16505550104"));
+        try {
+            var member = request("POST", "/api/users/me/registration", "valid", "{}");
+            assertEquals(201, member.statusCode());
+            var guardian = request("POST", "/api/users/me/registration", "guardian", "{}");
+            assertEquals(201, guardian.statusCode());
+            long userId = json.readTree(member.body()).get("userId").asLong();
+            long guardianId = json.readTree(guardian.body()).get("userId").asLong();
+
+            jdbc.update("INSERT INTO guardian_registrations (user_id, guardian_id) VALUES (?, ?)", userId, guardianId);
+            jdbc.update("""
+                    INSERT INTO safe_return_sessions (id, user_id, status, started_at)
+                    VALUES (?, ?, 'ENDED', CURRENT_TIMESTAMP)
+                    """, sessionId, userId);
+            Long eventId = jdbc.queryForObject("""
+                    INSERT INTO risk_events (session_id, event_type, description, detected_at)
+                    VALUES (?, 'TEST', 'test', CURRENT_TIMESTAMP) RETURNING id
+                    """, Long.class, sessionId);
+            jdbc.update("INSERT INTO risk_event_medias (event_id, media_type, storage_url) VALUES (?, 'AUDIO', ?)",
+                    eventId, "https://storage.example/file");
+
+            assertEquals(401, request("DELETE", "/api/users/me", null, null).statusCode());
+            assertEquals(503, request("DELETE", "/api/users/me", "valid", null).statusCode());
+            assertEquals(200, request("GET", "/api/users/me", "valid", null).statusCode());
+            assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM guardian_registrations WHERE user_id = ?",
+                    Integer.class, userId));
+            jdbc.update("UPDATE risk_event_medias SET storage_url = NULL WHERE event_id = ?", eventId);
+            assertEquals(204, request("DELETE", "/api/users/me", "valid", null).statusCode());
+            assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM safe_return_sessions WHERE id = ?", Integer.class, sessionId));
+            assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM risk_events WHERE id = ?", Integer.class, eventId));
+            assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM risk_event_medias WHERE event_id = ?", Integer.class, eventId));
+            assertEquals(204, request("DELETE", "/api/users/me", "valid", null).statusCode());
+            assertEquals(404, request("GET", "/api/users/me", "valid", null).statusCode());
+            assertEquals(200, request("GET", "/api/users/me", "guardian", null).statusCode());
+            var login = request("POST", "/api/auth/login", "valid", null);
+            assertEquals(200, login.statusCode());
+            assertEquals("SIGNUP_REQUIRED", json.readTree(login.body()).get("status").asText());
+        } finally {
+            jdbc.update("DELETE FROM risk_event_medias WHERE event_id IN (SELECT id FROM risk_events WHERE session_id = ?)", sessionId);
+            jdbc.update("DELETE FROM risk_events WHERE session_id = ?", sessionId);
+            jdbc.update("DELETE FROM safe_return_sessions WHERE id = ?", sessionId);
+            jdbc.update("""
+                    DELETE FROM guardian_registrations
+                    WHERE user_id IN (SELECT id FROM users WHERE firebase_uid IN (?, ?))
+                       OR guardian_id IN (SELECT id FROM users WHERE firebase_uid IN (?, ?))
+                    """, uid, guardianUid, uid, guardianUid);
+            jdbc.update("DELETE FROM users WHERE firebase_uid = ?", guardianUid);
+        }
+    }
 }
