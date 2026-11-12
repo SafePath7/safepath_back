@@ -1,9 +1,9 @@
 package com.safepath.backend.auth;
 
+import com.safepath.backend.user.UserService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -16,11 +16,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final FirebaseTokenService tokenService;
-    private final JdbcTemplate jdbcTemplate;
+    private final UserService userService;
 
-    public AuthController(FirebaseTokenService tokenService, JdbcTemplate jdbcTemplate) {
+    public AuthController(FirebaseTokenService tokenService, UserService userService) {
         this.tokenService = tokenService;
-        this.jdbcTemplate = jdbcTemplate;
+        this.userService = userService;
     }
 
     // Authorization: Bearer Firebase_ID_토큰
@@ -42,10 +42,7 @@ public class AuthController {
         // UID로 가입된 사용자를 찾아 가입 여부를 반환합니다.
         // SIGNUP_REQUIRED : 토큰 검증 성공. 해당 UID가 로컬 DB에 아직 없음  (DB에 없음 -> 신규 사용자)
         // REGISTERED : 가입한 사용자가 같은 계정으로 재로그인
-        LoginResponse response = jdbcTemplate.query("SELECT id FROM users WHERE firebase_uid = ?",
-                        (rs, rowNum) -> rs.getLong("id"), uid)
-                .stream()
-                .findFirst()
+        LoginResponse response = userService.findUserIdByFirebaseUid(uid)
                 .map(id -> new LoginResponse(id, "REGISTERED"))
                 .orElseGet(() -> new LoginResponse(null, "SIGNUP_REQUIRED"));
         return ResponseEntity.ok(response);

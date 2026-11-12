@@ -22,11 +22,13 @@ public class UserController {
     private final FirebaseAccountService accounts;
     // 전화번호의 중복 확인용 해시를 만들고, 전화번호를 암호화·복호화
     private final PhoneProtection phones;
+    private final UserService userService;
 
-    public UserController(JdbcTemplate jdbc, FirebaseAccountService accounts, PhoneProtection phones) {
+    public UserController(JdbcTemplate jdbc, FirebaseAccountService accounts, PhoneProtection phones, UserService userService) {
         this.jdbc = jdbc;
         this.accounts = accounts;
         this.phones = phones;
+        this.userService = userService;
     }
 
     // 최초 가입
@@ -34,7 +36,7 @@ public class UserController {
     public ResponseEntity<RegistrationResponse> register(@AuthenticationPrincipal String uid,
             @RequestBody(required = false) RegistrationRequest request) throws FirebaseAuthException {
         // 이미 가입했는지 확인
-        Long existing = findId(uid);
+        Long existing = userService.findUserIdByFirebaseUid(uid).orElse(null);
         if (existing != null) return ResponseEntity.ok(new RegistrationResponse(existing));
 
         // Firebase 계정 정보 확인
@@ -56,7 +58,7 @@ public class UserController {
         } catch (DuplicateKeyException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
-        Long id = findId(uid);
+        Long id = userService.findUserIdByFirebaseUid(uid).orElse(null);
         if (id == null) throw new IllegalStateException("Registration conflict without existing user");
         return ResponseEntity.ok(new RegistrationResponse(id));
     }
@@ -70,11 +72,6 @@ public class UserController {
                 (rs, rowNum) -> new UserResponse(rs.getLong("id"), rs.getString("name"),
                         rs.getString("email"), phones.decrypt(rs.getString("phone_encrypted"))), uid)
                 .stream().findFirst().map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
-    }
-
-    private Long findId(String uid) {
-        return jdbc.query("SELECT id FROM users WHERE firebase_uid = ?", (rs, rowNum) -> rs.getLong("id"), uid)
-                .stream().findFirst().orElse(null);
     }
 
     // API에서 주고받는 데이터의 모양을 정의
