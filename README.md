@@ -116,5 +116,6 @@ SAFEPATH_PHONE_HASH_KEY=<Base64로 인코딩한 별도의 32바이트 해시 키
 
 - [아키텍처](docs/architecture/README.md)
 - [데이터베이스와 Flyway](docs/database/README.md)
+- [사용자 인증과 회원 API](docs/user/README.md)
 - [Docker 로컬 개발 환경](docs/docker/README.md)
 - [배포 계획](docs/deployment/README.md)
