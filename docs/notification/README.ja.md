@@ -61,9 +61,9 @@ POST /api/notifications/sos
 | `updateFcmToken(firebaseUid, fcmToken)` | FCM トークン更新 API | ユーザー本人 |
 | `sendGuardianRequestNotification(requesterId, guardianId)` | 保護者連携リクエストを DB に保存した直後 | リクエストを受けた保護者 |
 | `sendDeletionReminderNotification(userId)` | メディア自動削除の 3 日前に実行するスケジューラ | ユーザー本人 |
-| `notifyGuardianOfRouteDeviation(userId)` | 経路逸脱リスクイベントの状態を保存した直後 | 承認済み保護者 |
+| `notifyRiskEventUpdate(userId, eventType)` | リスクイベントの保存・更新直後 | 承認済み保護者 |
 
-`sendGuardianRequestNotification`、`sendDeletionReminderNotification`、`notifyGuardianOfRouteDeviation` は、送信失敗を結果値として返します。そのため FCM 障害によって、すでに保存済みのリクエスト・イベント・削除処理がロールバックされることはありません。
+`sendGuardianRequestNotification`、`sendDeletionReminderNotification`、`notifyRiskEventUpdate` は、送信失敗を結果値として返します。そのため FCM 障害によって、すでに保存済みのリクエスト・イベント・削除処理がロールバックされることはありません。
 
 ## アプリ連携
 

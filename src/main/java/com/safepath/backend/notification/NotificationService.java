@@ -87,20 +87,27 @@ public class NotificationService {
 	}
 
 	/**
-	 * Notifies accepted guardians after a route-deviation risk event is updated.
+	 * Notifies accepted guardians after a risk event is updated.
 	 * A delivery failure is returned rather than thrown so the risk-event update remains saved.
 	 */
-	public NotificationResult notifyGuardianOfRouteDeviation(long userId) {
+	public NotificationResult notifyRiskEventUpdate(long userId, String eventType) {
+		if (eventType == null || eventType.isBlank()) {
+			throw new IllegalArgumentException("eventType must not be blank.");
+		}
+
 		List<String> guardianTokens = findAcceptedGuardianTokens(userId);
 		if (guardianTokens.isEmpty()) {
 			return new NotificationResult(0, 0);
 		}
 
 		Notification notification = Notification.builder()
-				.setTitle("경로 이탈 감지")
-				.setBody("보호 대상자가 설정된 경로를 이탈했습니다. 위치를 확인해 주세요.")
+				.setTitle("위험 이벤트 발생")
+				.setBody("보호 대상자에게 " + eventType + " 위험 이벤트가 발생했습니다.")
 				.build();
-		Map<String, String> data = Map.of("type", "ROUTE_DEVIATION", "userId", String.valueOf(userId));
+		Map<String, String> data = Map.of(
+				"type", "RISK_EVENT_UPDATED",
+				"userId", String.valueOf(userId),
+				"eventType", eventType);
 		List<Message> messages = guardianTokens.stream()
 				.map(token -> Message.builder()
 						.setToken(token)
@@ -113,7 +120,7 @@ public class NotificationService {
 			BatchResponse response = FirebaseMessaging.getInstance().sendEach(messages);
 			return new NotificationResult(response.getSuccessCount(), response.getFailureCount());
 		} catch (FirebaseMessagingException e) {
-			log.warn("Failed to send route-deviation notification. userId={}", userId, e);
+			log.warn("Failed to send risk-event notification. userId={}, eventType={}", userId, eventType, e);
 			return new NotificationResult(0, guardianTokens.size());
 		}
 	}

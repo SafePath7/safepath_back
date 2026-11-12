@@ -61,9 +61,9 @@ POST /api/notifications/sos
 | `updateFcmToken(firebaseUid, fcmToken)` | FCM 토큰 갱신 API | 사용자 본인 |
 | `sendGuardianRequestNotification(requesterId, guardianId)` | 보호자 연결 요청 DB 저장 직후 | 요청받은 보호자 |
 | `sendDeletionReminderNotification(userId)` | 미디어 자동 삭제 3일 전 스케줄러 | 사용자 본인 |
-| `notifyGuardianOfRouteDeviation(userId)` | 경로 이탈 위험 이벤트 상태 저장 직후 | 수락된 보호자 |
+| `notifyRiskEventUpdate(userId, eventType)` | 위험 이벤트 저장·갱신 직후 | 수락된 보호자 |
 
-`sendGuardianRequestNotification`, `sendDeletionReminderNotification`, `notifyGuardianOfRouteDeviation`는 전송 실패를 결과값으로 반환한다. 따라서 FCM 장애가 이미 저장된 요청·이벤트·삭제 작업을 롤백하지 않는다.
+`sendGuardianRequestNotification`, `sendDeletionReminderNotification`, `notifyRiskEventUpdate`는 전송 실패를 결과값으로 반환한다. 따라서 FCM 장애가 이미 저장된 요청·이벤트·삭제 작업을 롤백하지 않는다.
 
 ## 앱 연동
 
