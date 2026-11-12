@@ -63,6 +63,26 @@ Postman에서는 **POST** `http://localhost:8080/api/auth/login`을 선택하고
 
 관련 코드: `FirebaseConfig`는 Firebase를 초기화하고, `FirebaseTokenService`는 토큰을 검증합니다. `AuthController`는 검증된 UID로 가입 여부를 조회하며, `AuthControllerTest`는 Firebase와 DB의 가짜 객체를 사용해 이 흐름을 검사합니다.
 
+## 최초 가입과 내 정보
+
+전화번호 보호를 위해 서로 다른 32바이트 비밀 키 두 개가 필요합니다. 각각 `openssl rand -base64 32`로 생성하여 `.env` 또는 서버 환경변수에 설정합니다.
+
+```properties
+SAFEPATH_PHONE_ENCRYPTION_KEY=<Base64로 인코딩한 32바이트 암호화 키>
+SAFEPATH_PHONE_HASH_KEY=<Base64로 인코딩한 별도의 32바이트 해시 키>
+```
+
+모든 서버 인스턴스는 같은 키를 사용해야 합니다. 키를 임의로 교체하면 저장된 전화번호를 복호화하거나 중복을 비교할 수 없으므로, 키 교체에는 데이터 재암호화 및 해시 재생성이 필요합니다. 키는 Git에 올리지 않습니다.
+
+두 API 모두 `Authorization: Bearer <Firebase ID 토큰>`이 필요합니다. `POST /api/users/me/registration`은 선택적 본문 `{"name":"홍길동"}`을 받습니다. 이름이 없거나 공백이면 연결된 Google 계정의 표시 이름을 사용합니다. 서버는 Firebase 계정의 Google 연결 이메일이 계정의 인증된 이메일과 일치하는지, 전화번호가 같은 계정에 phone 공급자로 연결되어 있는지 확인합니다.
+
+- 최초 가입: `201`, `{"userId":42}`. 동일 UID로 재요청하면 기존 정보를 유지하고 `200`과 기존 ID를 반환합니다.
+- 이름이 없거나 100자를 초과하면 `400`, Google 이메일 또는 연결된 전화번호가 조건을 충족하지 않으면 `422`, 다른 회원의 이메일이나 전화번호가 중복되면 `409`입니다.
+- `GET /api/users/me`는 가입된 회원에게 `200`과 `{"userId":42,"name":"홍길동","email":"user@example.com","phoneNumber":"+821012345678"}`을 반환합니다. 가입 전에는 `404`입니다.
+- 두 API 모두 인증 토큰이 없거나 유효하지 않으면 `401`을 반환합니다. 위 오류 응답에는 별도 본문이 없습니다.
+
+가입 시 FCM 토큰은 필요하지 않습니다. 가입 후 `PUT /api/notifications/fcm-token`으로 별도 등록합니다. 가입 및 내 정보 조회 외 회원정보 수정과 전화번호 변경은 아직 구현되지 않았습니다.
+
 ## 프로젝트 구조
 
 - `src/main/java/` — Spring Boot 애플리케이션
