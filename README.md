@@ -81,7 +81,21 @@ SAFEPATH_PHONE_HASH_KEY=<Base64로 인코딩한 별도의 32바이트 해시 키
 - `GET /api/users/me`는 가입된 회원에게 `200`과 `{"userId":42,"name":"홍길동","email":"user@example.com","phoneNumber":"+821012345678"}`을 반환합니다. 가입 전에는 `404`입니다.
 - 두 API 모두 인증 토큰이 없거나 유효하지 않으면 `401`을 반환합니다. 위 오류 응답에는 별도 본문이 없습니다.
 
-가입 시 FCM 토큰은 필요하지 않습니다. 가입 후 `PUT /api/notifications/fcm-token`으로 별도 등록합니다. 가입 및 내 정보 조회 외 회원정보 수정과 전화번호 변경은 아직 구현되지 않았습니다.
+가입 시 FCM 토큰은 필요하지 않습니다. 가입 후 `PUT /api/notifications/fcm-token`으로 별도 등록합니다.
+
+## 회원정보 수정과 탈퇴
+
+각 API에 Firebase ID 토큰을 Bearer 토큰으로 보냅니다.
+
+| API | 요청 본문 | 성공 응답 |
+| --- | --- | --- |
+| `PATCH /api/users/me` | `{"name":"새 이름"}` | `204 No Content`. 이름과 `updated_at`을 갱신합니다. |
+| `PATCH /api/users/me/phone` | `{"phoneNumber":"+821012345678"}` | 현재 `503 Service Unavailable`. 새 SMS 인증을 증명하고 재사용을 방지하는 절차가 구현될 때까지 변경을 차단합니다. |
+| `DELETE /api/users/me` | 없음 | `204 No Content`. SafePath 회원과 양방향 보호자 관계를 삭제합니다. 이미 탈퇴한 UID도 `204`를 받습니다. |
+
+전화번호 변경은 현재 사용할 수 없습니다. Firebase에 번호가 연결되었다는 사실만으로 이번 변경의 SMS 인증을 확인할 수 없으므로, 클라이언트와 서버의 일회성 인증 절차가 필요합니다. 수정 API에서 미가입 회원은 `404`를 받습니다.
+
+탈퇴 후 Firebase 계정은 Google 로그인에 계속 사용할 수 있으며, 재로그인하면 `SIGNUP_REQUIRED`를 반환합니다. 위험 이벤트 미디어 파일 또는 음성 원본이 있으면 저장소 삭제 구현이 없으므로 `503`을 반환하고 DB 데이터를 보존합니다. 파일이 없는 경우 세션과 위험 이벤트도 삭제합니다. 이 삭제 정책은 이전 위험 세션 보관 방침과 충돌하므로 배포 전 팀의 정책 확인이 필요합니다.
 
 ## 프로젝트 구조
 

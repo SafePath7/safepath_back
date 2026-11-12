@@ -20,19 +20,31 @@ public class FirebaseAccountService {
         UserInfo google = Arrays.stream(user.getProviderData())
                 .filter(provider -> "google.com".equals(provider.getProviderId()))
                 .findFirst().orElse(null);
-        // 전화번호 연결 확인
-        boolean linkedPhone = Arrays.stream(user.getProviderData())
-                .anyMatch(provider -> "phone".equals(provider.getProviderId())
-                        && user.getPhoneNumber() != null
-                        && user.getPhoneNumber().equals(provider.getPhoneNumber()));
+        String phoneNumber = linkedPhoneNumber(user);
         // 가입에 필요한 조건 확인
         if (google == null || google.getEmail() == null || google.getEmail().isBlank()
                 || !user.isEmailVerified() || !google.getEmail().equalsIgnoreCase(user.getEmail())
-                || user.getPhoneNumber() == null || user.getPhoneNumber().isBlank() || !linkedPhone) {
+                || phoneNumber == null) {
             return null;
         }
         // 확인된 정보 반환
-        return new Account(google.getDisplayName(), google.getEmail(), user.getPhoneNumber());
+        return new Account(google.getDisplayName(), google.getEmail(), phoneNumber);
+    }
+
+    // Firebase에서 UID에 연결된 전화번호를 조회
+    public String getLinkedPhoneNumber(String uid) throws FirebaseAuthException {
+        return linkedPhoneNumber(FirebaseAuth.getInstance().getUser(uid));
+    }
+
+    // 사용자 전화번호가 비어 있지 않고, phone 제공자에 연결된 번호와 일치할 때만 번호를 반환
+    private String linkedPhoneNumber(UserRecord user) {
+        String phoneNumber = user.getPhoneNumber();
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            return null;
+        }
+        return Arrays.stream(user.getProviderData())
+                .anyMatch(provider -> "phone".equals(provider.getProviderId())
+                        && phoneNumber.equals(provider.getPhoneNumber())) ? phoneNumber : null;
     }
 
     public record Account(String displayName, String email, String phoneNumber) {}

@@ -2,12 +2,15 @@ package com.safepath.backend.user;
 
 import com.google.firebase.auth.FirebaseAuthException;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -73,6 +76,52 @@ public class UserController {
                         rs.getString("email"), phones.decrypt(rs.getString("phone_encrypted"))), uid)
                 .stream().findFirst().map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
     }
+
+    // 이름 수정
+    // 이름 앞뒤 공백을 제거한 뒤, 빈 이름이거나 100자를 초과하면 400을 반환
+    @PatchMapping
+    public ResponseEntity<Void> updateProfile(@AuthenticationPrincipal String uid,
+            @RequestBody(required = false) ProfileUpdateRequest request) {
+        String name = request == null || request.name() == null ? "" : request.name().strip();
+        if (name.isBlank() || name.codePointCount(0, name.length()) > 100) {
+            return ResponseEntity.badRequest().build();
+        }
+        if (!userService.updateName(uid, name)) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    // 전화번호 변경
+    @PatchMapping("/phone")
+    public ResponseEntity<Void> changePhone(@AuthenticationPrincipal String uid,
+            @RequestBody(required = false) PhoneUpdateRequest request) {
+        String phone = request == null ? null : request.phoneNumber();
+        if (phone == null || !phone.matches("\\+[1-9][0-9]{1,14}")) {
+            return ResponseEntity.badRequest().build();
+        }
+        if (userService.findUserIdByFirebaseUid(uid).isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        // The existing request cannot prove a fresh, single-use SMS verification.
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+    }
+
+    // 회원 탈퇴
+    @DeleteMapping
+    public ResponseEntity<Void> withdraw(@AuthenticationPrincipal String uid) {
+        try {
+            userService.withdraw(uid);  // 실제 삭제
+        } catch (UserService.FileDeletionUnavailableException e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    public record ProfileUpdateRequest(String name) {}
+    public record PhoneUpdateRequest(String phoneNumber) {}
 
     // API에서 주고받는 데이터의 모양을 정의
     public record RegistrationRequest(String name) {}   // 가입 요청에서 입력받는 이름
