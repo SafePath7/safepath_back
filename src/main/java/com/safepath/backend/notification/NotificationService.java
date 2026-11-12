@@ -87,6 +87,38 @@ public class NotificationService {
 	}
 
 	/**
+	 * Notifies accepted guardians after a route-deviation risk event is updated.
+	 * A delivery failure is returned rather than thrown so the risk-event update remains saved.
+	 */
+	public NotificationResult notifyGuardianOfRouteDeviation(long userId) {
+		List<String> guardianTokens = findAcceptedGuardianTokens(userId);
+		if (guardianTokens.isEmpty()) {
+			return new NotificationResult(0, 0);
+		}
+
+		Notification notification = Notification.builder()
+				.setTitle("경로 이탈 감지")
+				.setBody("보호 대상자가 설정된 경로를 이탈했습니다. 위치를 확인해 주세요.")
+				.build();
+		Map<String, String> data = Map.of("type", "ROUTE_DEVIATION", "userId", String.valueOf(userId));
+		List<Message> messages = guardianTokens.stream()
+				.map(token -> Message.builder()
+						.setToken(token)
+						.setNotification(notification)
+						.putAllData(data)
+						.build())
+				.toList();
+
+		try {
+			BatchResponse response = FirebaseMessaging.getInstance().sendEach(messages);
+			return new NotificationResult(response.getSuccessCount(), response.getFailureCount());
+		} catch (FirebaseMessagingException e) {
+			log.warn("Failed to send route-deviation notification. userId={}", userId, e);
+			return new NotificationResult(0, guardianTokens.size());
+		}
+	}
+
+	/**
 	 * Sends a notification to the requested guardian after a guardian-connection request is saved.
 	 * A delivery failure does not throw so it cannot undo the saved connection request.
 	 */
