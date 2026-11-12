@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import com.safepath.backend.auth.FirebaseAuthenticationFilter;
 import com.safepath.backend.auth.FirebaseTokenService;
+import com.safepath.backend.config.FirebaseConfig;
 import jakarta.servlet.ServletContext;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Import(SecurityConfigIntegrationTest.TestEndpoints.class)
 class SecurityConfigIntegrationTest {
     @LocalServerPort int port;
+    @MockitoBean FirebaseConfig firebaseConfig;
     @MockitoBean FirebaseTokenService tokens;
     @Autowired ServletContext servletContext;
     @Autowired FilterChainProxy securityChain;
