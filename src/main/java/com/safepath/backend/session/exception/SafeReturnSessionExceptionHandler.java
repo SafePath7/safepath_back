@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -21,6 +22,11 @@ public class SafeReturnSessionExceptionHandler {
 	@ExceptionHandler(AuthenticationException.class)
 	public ResponseEntity<SessionApiErrorResponse> handleAuthenticationFailure(AuthenticationException exception) {
 		return error(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Authentication is required.");
+	}
+
+	@ExceptionHandler(AccessDeniedException.class)
+	public ResponseEntity<SessionApiErrorResponse> handleAccessDenied(AccessDeniedException exception) {
+		return error(HttpStatus.FORBIDDEN, "USER_NOT_REGISTERED", "A registered user account is required.");
 	}
 
 	@ExceptionHandler(MethodArgumentTypeMismatchException.class)

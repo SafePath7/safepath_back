@@ -24,11 +24,11 @@
 
 동일 사용자에게 이미 활성 세션이 있다면 저장소가 `IllegalStateException`을 발생시킵니다. 서비스는 별도로 조회한 뒤 저장하는 방식 대신 저장소의 원자적 중복 검사를 이용합니다.
 
-서비스 자체는 사용자 ID의 형식만 검사합니다. 호출자를 인증하거나 실제 사용자 존재 여부를 확인하지 않으며, 해당 기능은 추후 승인된 인증 및 사용자 서비스 연동이 필요합니다.
+서비스 자체는 사용자 ID의 형식만 검사합니다. Controller는 Firebase 인증 필터가 검증한 UID를 `UserService`로 조회한 뒤 DB의 `Long userId`를 전달합니다.
 
 ## REST API
 
-현재 인증은 Postman 및 로컬 검증에만 쓰는 임시 HTTP Basic 테스트 인증입니다. `local`과 `local-test-auth` 프로필이 모두 활성화된 경우에만 사용할 수 있으며, 정식 사용자 인증으로 사용하면 안 됩니다. 테스트 모드에서는 인증된 `LocalTestUserPrincipal`에서 `Long userId`를 가져옵니다. 요청 본문, 쿼리 파라미터, 임의의 헤더에 담긴 사용자 ID는 신원 확인에 사용하지 않습니다. Firebase 인증 및 UID 매핑은 아직 연결되지 않았습니다.
+모든 세션 요청은 `Authorization: Bearer <Firebase ID token>`을 사용합니다. Firebase 인증 필터가 토큰을 검증하고 principal에 UID 문자열을 설정합니다. Controller는 `UserService.findUserIdByFirebaseUid(String)`으로 가입된 사용자의 DB `Long userId`를 조회합니다. 인증되지 않은 요청은 `401`, Firebase 인증은 됐지만 가입되지 않은 UID는 `403 USER_NOT_REGISTERED`를 받습니다. 사용자 ID는 요청 본문, 쿼리 또는 임의 헤더에서 가져오지 않습니다.
 
 | API 이름 | HTTP Method 및 경로 | Request JSON | 성공 Response JSON |
 |---|---|---|---|
@@ -60,29 +60,30 @@
 |---|---|---|
 | `400 Bad Request` | `INVALID_SESSION_ID` 또는 `INVALID_REQUEST` | UUID 형식 오류 또는 잘못된 요청 |
 | `401 Unauthorized` | `UNAUTHENTICATED` | 인증 누락 또는 지원되지 않는 인증 |
+| `403 Forbidden` | `USER_NOT_REGISTERED` | 유효한 Firebase UID에 대응하는 가입 사용자가 없음 |
 | `404 Not Found` | `SESSION_NOT_FOUND` | 세션 없음, 이미 종료됨, 또는 소유자가 다름 |
 | `409 Conflict` | `ACTIVE_SESSION_CONFLICT` | 동일 사용자의 활성 세션 중복 시작 |
 | `500 Internal Server Error` | `INTERNAL_ERROR` | 예상하지 못한 서버 오류(내부 예외 상세 내용은 노출하지 않음) |
 
-소유권 불일치에 대한 `404` 응답은 현재 구현 정책이며, 최종 상태 코드 및 오류 정책에 대한 팀 합의가 필요합니다.
+소유권 불일치에 대한 `404` 응답은 현재 구현 정책으로, 다른 사용자의 세션 존재 여부를 노출하지 않습니다.
 
 ### Postman 요청 예시
 
-아래 Basic Auth 예시는 `local,local-test-auth` 프로필의 임시 로컬 테스트에만 해당합니다. 운영 및 Dev 인증 방식이 아니며, 정식 Firebase 인증은 아직 구현되지 않았습니다. 요청에 사용자 ID를 별도로 넣지 않습니다.
+요청에는 Firebase ID token을 사용하며 사용자 ID를 별도로 전달하지 않습니다.
 
 ```http
 POST http://127.0.0.1:8080/api/safe-return/sessions
-Authorization: Basic <로컬 테스트 인증 정보>
+Authorization: Bearer <Firebase ID token>
 ```
 
 ```http
 GET http://127.0.0.1:8080/api/safe-return/sessions/{반환된-session-id}/status
-Authorization: Basic <로컬 테스트 인증 정보>
+Authorization: Bearer <Firebase ID token>
 ```
 
 ```http
 PATCH http://127.0.0.1:8080/api/safe-return/sessions/{반환된-session-id}/end
-Authorization: Basic <로컬 테스트 인증 정보>
+Authorization: Bearer <Firebase ID token>
 ```
 
 요청 본문은 필요하지 않습니다. 로컬 환경에서 Postman을 이용한 세션 시작·조회·종료, 인증 및 소유권 검증, 중복 시작 차단, 오류 응답 수동 테스트를 진행했습니다. 각 요청의 실제 결과는 저장한 캡처로 확인할 수 있습니다.
@@ -96,7 +97,7 @@ Authorization: Basic <로컬 테스트 인증 정보>
 - `void endSession(UUID sessionId, Long userId)` — 소유자가 일치할 때만 활성 세션 제거. 입력값이 유효하지 않으면 `IllegalArgumentException`, 세션이 없거나 이미 종료되었으면 `NoSuchElementException`, 다른 사용자의 세션이면 `SecurityException` 발생
 - `ActiveSession getSessionStatus(UUID sessionId, Long userId)` — 소유권을 검사한 후 활성 세션 반환
 - `removeIfOwned(UUID, Long)` — 저장소에서 존재 여부 및 소유권을 확인하고 두 인덱스에서 세션 제거
-- `SafeReturnSessionController` — 세 가지 REST 엔드포인트를 제공하며, 현재 임시 로컬 테스트 인증의 `LocalTestUserPrincipal`에서 호출자 ID 획득
+- `SafeReturnSessionController` — 세 가지 REST 엔드포인트를 제공하며, Firebase UID를 공용 `UserService`로 DB 사용자 ID에 매핑
 
 사용 예시:
 
@@ -118,41 +119,6 @@ safeReturnSessionService.endSession(session.id(), 42L);
 
 일반 활성 세션의 시작·조회·종료는 DB 테이블, 엔티티, Repository, 마이그레이션 또는 환경변수에 접근하지 않습니다. 일반 세션 종료는 메모리에서만 제거되며 세션 이력 레코드를 저장하지 않습니다. 이 기능을 위해 DB 스키마를 변경할 필요는 없습니다.
 
-## 로컬 Postman 테스트 인증
-
-임시 HTTP Basic 테스트 계정은 `local`과 `local-test-auth` 프로필이 모두 활성화된 경우에만 사용할 수 있습니다. `local-test-auth`는 기존 VS Code 실행 설정과 별도로 구분됩니다.
-
-`LocalTestAuthStartupGuard`는 다른 프로필이 함께 활성화되었거나, 데이터 소스가 명시적인 루프백 PostgreSQL JDBC URL이 아니거나, 데이터 소스 재정의가 설정되었거나, 테스트 비밀번호가 누락되었거나, 서버 바인딩 주소가 정확히 `127.0.0.1`이 아니면 테스트 프로필 사용을 거부합니다.
-
-| 테스트 계정 | Principal `userId` |
-|---|---:|
-| `postman-user-1` | `9000000001` |
-| `postman-user-2` | `9000000002` |
-
-다음 운영체제 환경변수를 로컬에 설정합니다. **비밀번호 값은 소스 코드, `.env`, Postman 내보내기 파일, 로그에 기록하지 않습니다.**
-
-- `SAFEPATH_LOCAL_TEST_USER_1_PASSWORD`
-- `SAFEPATH_LOCAL_TEST_USER_2_PASSWORD`
-
-Windows PowerShell에서는 비밀번호를 화면에 표시하지 않는 입력창으로 받아 두 프로필을 활성화한 상태에서 실행합니다. 로컬 PostgreSQL 연결에 필요한 일반 환경변수도 별도로 제공해야 합니다.
-
-```powershell
-$env:SPRING_PROFILES_ACTIVE = 'local,local-test-auth'
-$secure = Read-Host 'Local test user 1 password' -AsSecureString
-$env:SAFEPATH_LOCAL_TEST_USER_1_PASSWORD = [System.Net.NetworkCredential]::new('', $secure).Password
-$secure = Read-Host 'Local test user 2 password' -AsSecureString
-$env:SAFEPATH_LOCAL_TEST_USER_2_PASSWORD = [System.Net.NetworkCredential]::new('', $secure).Password
-.\gradlew.bat bootRun
-```
-
-Postman의 Authorization에서 **Basic Auth**를 선택하고 위의 사용자명과 해당 비밀번호를 입력합니다. 비밀번호는 내보내지 않는 로컬 변수로 관리합니다. `userId`를 본문, 쿼리 문자열, 헤더에 직접 전달하지 않습니다. 테스트 모드에서 사용자 ID의 유일한 출처는 인증된 `LocalTestUserPrincipal`입니다.
-
-REST Controller는 기존 메모리 기반 Service 및 Store와 연결되어 있습니다. `POST /api/safe-return/sessions`로 시작한 뒤 반환된 UUID로 GET 조회와 PATCH 종료를 요청합니다.
-
-로컬 테스트 인증은 Firebase 인증이 아니며 Firebase 토큰 검증이나 Firebase UID와 DB 사용자 ID의 매핑을 수행하지 않습니다. 위 사용자 ID는 메모리 세션 흐름을 위한 가상 ID입니다. HTTP Basic은 인증 정보를 자체 암호화하지 않으므로 IPv4 루프백에만 바인딩하며 프록시, 터널 또는 외부 네트워크 인터페이스로 노출해서는 안 됩니다. CSRF는 이 상태 비저장 로컬 테스트용 보안 체인에서만 비활성화됩니다.
-
-보호 장치는 데이터 소스 등 애플리케이션 싱글턴이 초기화되기 전에 실행됩니다. `local` 프로필만 활성화하면 테스트 계정 및 테스트 보안 체인이 등록되지 않습니다. `local-test-auth`와 `dev` 또는 다른 비로컬 프로필을 함께 사용하는 구성은 거부됩니다.
-
 ## 테스트 실행 방법
 
 Windows에서 세션 서비스 및 저장소 단위 테스트 실행:
@@ -161,20 +127,21 @@ Windows에서 세션 서비스 및 저장소 단위 테스트 실행:
 .\gradlew.bat test --tests "com.safepath.backend.session.service.SafeReturnSessionServiceTest" --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"
 ```
 
-로컬 인증 보호 장치 및 HTTP Basic 테스트 실행:
+Firebase 인증 필터를 통한 세션 Controller 테스트 실행:
 
 ```powershell
-.\gradlew.bat test --tests "com.safepath.backend.security.local.*"
+.\gradlew.bat test --tests "com.safepath.backend.session.controller.SafeReturnSessionControllerTest"
 ```
 
-보안 및 REST Controller HTTP 테스트는 메모리 기반 가상 비밀번호를 사용하므로 PostgreSQL 연결이나 로컬 테스트 비밀번호 환경변수가 필요하지 않습니다.
+Controller 테스트는 Firebase 토큰 검증 결과와 사용자 DB 조회를 mock으로 대체하지만, 실제 `FirebaseAuthenticationFilter`와 공통 `SecurityConfig` 체인을 사용합니다. Firebase 인증 정보나 PostgreSQL 연결은 필요하지 않습니다.
 
 단위 및 통합 테스트에서는 세션 저장과 두 ID 기준 조회, 미존재 세션 조회, 제거, 중복 UUID·사용자 차단, 모델의 null 검증, 세션 시작과 저장, UUID·시작 시각 생성, 잘못된 사용자 ID, 동시 세션 시작, 소유자 조회, 삭제된 세션, 잘못된 인자, 타 사용자 접근 거부를 검증합니다.
 
 종료 테스트에서는 소유자만 제거 가능한지, 두 인덱스에서 제거되는지, 종료 후 재시작이 가능한지, 존재하지 않거나 이미 종료된 세션 처리, 잘못된 입력, 동시 종료 요청 등을 확인합니다.
 
-### 이전 기본 테스트 기록
+### Firebase 인증 연동 전의 테스트 기록 (참고용)
 
+다음 결과는 임시 로컬 인증을 사용하던 이전 코드의 기록이며 현재 인증 경로의 검증 결과가 아닙니다.
 - 실행 명령어: `.\gradlew.bat test`
 - 기록된 결과: **총 25개 테스트 중 25개 통과, 실패 0개, 오류 0개, 건너뜀 0개**
 - `SafeReturnSessionServiceTest`: 15개 통과
@@ -184,35 +151,14 @@ Windows에서 세션 서비스 및 저장소 단위 테스트 실행:
 - Flyway V1 마이그레이션 정상 적용
 - 이전 `contextLoads()` 실패는 기본 프로필에 DataSource URL이 없어서 발생했으며, `local` 프로필 및 DB 환경변수를 설정한 후 통과
 
-### REST Controller 검증 기록
-
-- 선택 테스트 명령어: `.\gradlew.bat test --tests "com.safepath.backend.security.local.*" --tests "com.safepath.backend.session.service.SafeReturnSessionServiceTest" --tests "com.safepath.backend.session.store.ActiveSessionStoreTest"`
-- 기록된 결과: **50개 통과, 실패 0개**. REST Controller HTTP 통합 테스트 12개, 로컬 인증·보안 테스트 14개, 기존 Service/Store 테스트 24개 포함
-- 전체 테스트 명령어: `.\gradlew.bat test`
-- 기록된 결과: **총 51개 중 50개 통과, 1개 실패**. 기본 프로필 테스트 프로세스에 DataSource URL 또는 환경변수가 없어 `BackendApplicationTests.contextLoads()`에서 데이터 소스를 구성하지 못함. AWS RDS 연결 시도는 없었음
-
-위 결과는 기존 문서에 기록된 테스트 결과이며, 이번 README 수정 과정에서 전체 테스트를 새로 실행한 결과는 아닙니다.
-
-### Postman 수동 검증
-
-로컬 테스트 인증 계정 두 개를 이용하여 세션 시작, 조회, 종료 및 오류 응답을 순서대로 확인했습니다. 테스트 항목에는 정상 시작(`201`), 정상 조회(`200`), 정상 종료(`204`), 종료 후 조회(`404`), 세션 재시작(`201`), 타 사용자 조회 차단(`404`), 중복 시작 차단(`409`), 미인증 조회 차단(`401`), 잘못된 UUID(`400`), 미존재 세션(`404`), 타 사용자 종료 차단(`404`), 무단 종료 시도 후 기존 세션 유지(`200`) 등이 포함됩니다.
-
-테스트별 요청과 응답은 별도로 저장한 Postman 캡처를 기준으로 확인합니다. 이번 문서 편집 과정에서는 Postman 요청을 다시 실행하지 않았습니다.
-
-### 최근 컴파일 확인
-
-- 실행 명령어: `.\gradlew.bat compileJava` 및 세션 Controller, Service, Store 선택 테스트
-- 결과: **컴파일 성공; 선택 테스트 36개 통과, 실패·오류 0개** (2026-11-10)
-- Exception Handler를 `session.exception`으로 이동하고 테스트 import를 수정한 후 검증
-
 ## 현재 구현 상태
 
 - 메모리 기반 세션 저장소와 `SafeReturnSessionService` 구현 완료
-- `SafeReturnSessionController`에서 세 가지 REST API를 기존 Service에 연결하고, 인증된 로컬 테스트 Principal에서 사용자 ID 획득
+- `SafeReturnSessionController`에서 세 가지 REST API를 기존 Service에 연결하고, 검증된 Firebase UID를 공용 `UserService`로 DB 사용자 ID에 매핑
 - `session.exception.SafeReturnSessionExceptionHandler`가 세션 Controller에만 적용되며 현재 오류 코드 및 JSON 응답을 처리
-- 소유권 불일치의 `404` 정책 최종 확인은 팀 합의 필요
-- Firebase 인증 및 Firebase UID를 내부 `users.id` (`Long`)로 매핑하는 기능은 DB 담당 팀과의 연동 예정이며 현재 미구현
-- Draft PR #2는 팀 리뷰 및 병합 대기 중
+- 미가입 Firebase UID는 `403 USER_NOT_REGISTERED`로 거부
+- 소유권 불일치 및 세션 미존재는 `404 SESSION_NOT_FOUND`로 처리
+- 기존 메모리 저장소 기능은 프로세스 재시작 시 유지되지 않으며 DB 영속화는 별도 범위
 
 ## 추후 결정 사항
 

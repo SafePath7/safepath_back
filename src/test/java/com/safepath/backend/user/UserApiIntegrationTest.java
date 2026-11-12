@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.safepath.backend.auth.FirebaseTokenService;
+import com.safepath.backend.config.FirebaseConfig;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -28,6 +29,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class UserApiIntegrationTest {
     @LocalServerPort int port;
     @Autowired JdbcTemplate jdbc;
+    @MockitoBean FirebaseConfig firebaseConfig;
     @MockitoBean FirebaseTokenService tokens;
     @MockitoBean FirebaseAccountService accounts;
     private final String uid = "test-" + UUID.randomUUID();
