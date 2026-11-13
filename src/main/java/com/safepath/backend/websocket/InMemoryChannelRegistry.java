@@ -23,7 +23,7 @@ public class InMemoryChannelRegistry {
         participantIds.addAll(guardianIds);
 
         String channelId = UUID.randomUUID().toString();
-        channels.put(channelId, new Channel(participantIds));
+        channels.put(channelId, new Channel(userId, participantIds));
         return channelId;
     }
 
@@ -34,6 +34,11 @@ public class InMemoryChannelRegistry {
     public boolean isParticipant(String channelId, Long participantId) {
         Channel channel = channels.get(channelId);
         return channel != null && participantId != null && channel.participantIds().contains(participantId);
+    }
+
+    public boolean isLocationPublisher(String channelId, Long participantId) {
+        Channel channel = channels.get(channelId);
+        return channel != null && participantId != null && channel.userId().equals(participantId);
     }
 
     public void join(String channelId, Long participantId, String sessionId) {
@@ -66,11 +71,12 @@ public class InMemoryChannelRegistry {
     }
 
     private record Channel(
+            Long userId,
             Set<Long> participantIds,
             ConcurrentMap<String, Long> sessions
     ) {
-        private Channel(Set<Long> participantIds) {
-            this(Set.copyOf(participantIds), new ConcurrentHashMap<>());
+        private Channel(Long userId, Set<Long> participantIds) {
+            this(userId, Set.copyOf(participantIds), new ConcurrentHashMap<>());
         }
     }
 }
