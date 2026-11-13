@@ -3,17 +3,15 @@ package com.safepath.backend.websocket;
 import com.safepath.backend.websocket.dto.ConnectionMessageRequest;
 import com.safepath.backend.websocket.dto.ConnectionMessageResponse;
 import jakarta.validation.Valid;
+import java.time.Instant;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Controller;
 
-import java.time.Instant;
-
 @Controller
 public class ConnectionMessageController {
-
     private final InMemoryChannelRegistry channelRegistry;
 
     public ConnectionMessageController(InMemoryChannelRegistry channelRegistry) {
@@ -25,20 +23,15 @@ public class ConnectionMessageController {
     public ConnectionMessageResponse relay(
             @DestinationVariable String connectionId,
             @Valid ConnectionMessageRequest request,
-            SimpMessageHeaderAccessor headerAccessor
-    ) {
+            SimpMessageHeaderAccessor headerAccessor) {
         if (!channelRegistry.exists(connectionId)) {
-            throw new IllegalArgumentException("존재하지 않는 WebSocket 채널입니다.");
+            throw new IllegalArgumentException("Unknown WebSocket channel");
         }
-        if (!channelRegistry.isSessionJoined(connectionId, headerAccessor.getSessionId())) {
-            throw new IllegalArgumentException("채널에 입장하지 않은 WebSocket 세션입니다.");
+        Long participantId = channelRegistry.participantIdForSession(connectionId, headerAccessor.getSessionId())
+                .orElseThrow(() -> new IllegalArgumentException("WebSocket session has not joined this channel"));
+        if (!String.valueOf(participantId).equals(request.senderId())) {
+            throw new IllegalArgumentException("senderId does not match the authenticated participant");
         }
-
-        return new ConnectionMessageResponse(
-                connectionId,
-                request.senderId(),
-                request.content(),
-                Instant.now()
-        );
+        return new ConnectionMessageResponse(connectionId, String.valueOf(participantId), request.content(), Instant.now());
     }
 }

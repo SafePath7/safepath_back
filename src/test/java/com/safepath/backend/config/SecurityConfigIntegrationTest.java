@@ -6,6 +6,8 @@ import static org.mockito.Mockito.*;
 import com.safepath.backend.auth.FirebaseAuthenticationFilter;
 import com.safepath.backend.auth.FirebaseTokenService;
 import com.safepath.backend.config.FirebaseConfig;
+import com.safepath.backend.user.UserService;
+import java.util.Optional;
 import jakarta.servlet.ServletContext;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -36,6 +38,7 @@ class SecurityConfigIntegrationTest {
     @LocalServerPort int port;
     @MockitoBean FirebaseConfig firebaseConfig;
     @MockitoBean FirebaseTokenService tokens;
+    @MockitoBean UserService users;
     @Autowired ServletContext servletContext;
     @Autowired FilterChainProxy securityChain;
     private final HttpClient client = HttpClient.newHttpClient();
@@ -81,7 +84,7 @@ class SecurityConfigIntegrationTest {
     }
 
     @Test
-    void loginAndWebSocketHandshakeRemainPublic() throws Exception {
+    void loginRemainsPublicAndWebSocketConnectRequiresToken() throws Exception {
         var login = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/login"))
                 .POST(HttpRequest.BodyPublishers.noBody()).build();
         // Login controller returns 401 for a missing token; the request reaches it without invoking verification.
@@ -100,9 +103,13 @@ class SecurityConfigIntegrationTest {
                     }
                 })
                 .get(5, TimeUnit.SECONDS);
-        socket.sendText("CONNECT\naccept-version:1.2\nhost:localhost\n\n\0", true).get(5, TimeUnit.SECONDS);
+        when(tokens.verifyIdToken("ws-token")).thenReturn("firebase-ws-uid");
+        when(users.findUserIdByFirebaseUid("firebase-ws-uid")).thenReturn(Optional.of(42L));
+        socket.sendText("CONNECT\naccept-version:1.2\nhost:localhost\nAuthorization:Bearer ws-token\n\n\0", true)
+                .get(5, TimeUnit.SECONDS);
         assertTrue(stompResponse.get(5, TimeUnit.SECONDS).startsWith("CONNECTED"));
         socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
-        verifyNoInteractions(tokens);
+        verify(tokens).verifyIdToken("ws-token");
+        verify(users).findUserIdByFirebaseUid("firebase-ws-uid");
     }
 }
