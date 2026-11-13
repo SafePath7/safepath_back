@@ -19,7 +19,7 @@ class WebSocketSessionEventListenerTest {
         WebSocketSessionEventListener listener = new WebSocketSessionEventListener(registry);
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
         accessor.setSessionId("session-1");
-        accessor.setDestination("/topic/connections/abc123");
+        accessor.setDestination("/topic/connections/abc123/locations");
         accessor.setUser(UsernamePasswordAuthenticationToken.authenticated(10L, null, null));
         accessor.setNativeHeader("participant-id", "999");
 

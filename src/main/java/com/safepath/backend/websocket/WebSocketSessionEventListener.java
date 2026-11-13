@@ -10,6 +10,7 @@ import org.springframework.web.socket.messaging.SessionSubscribeEvent;
 @Component
 public class WebSocketSessionEventListener {
     private static final String CHANNEL_TOPIC_PREFIX = "/topic/connections/";
+    private static final String LOCATION_TOPIC_SUFFIX = "/locations";
     private final InMemoryChannelRegistry channelRegistry;
 
     public WebSocketSessionEventListener(InMemoryChannelRegistry channelRegistry) {
@@ -21,13 +22,17 @@ public class WebSocketSessionEventListener {
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
         String destination = accessor.getDestination();
         String sessionId = accessor.getSessionId();
-        if (destination == null || sessionId == null || !destination.startsWith(CHANNEL_TOPIC_PREFIX)) return;
+        if (destination == null || sessionId == null || !destination.startsWith(CHANNEL_TOPIC_PREFIX)
+                || !destination.endsWith(LOCATION_TOPIC_SUFFIX)) return;
 
         if (!(accessor.getUser() instanceof Authentication authentication)
                 || !(authentication.getPrincipal() instanceof Long participantId)) {
             throw new IllegalStateException("Unauthenticated WebSocket session");
         }
-        channelRegistry.join(destination.substring(CHANNEL_TOPIC_PREFIX.length()), participantId, sessionId);
+        String channelId = destination.substring(
+                CHANNEL_TOPIC_PREFIX.length(), destination.length() - LOCATION_TOPIC_SUFFIX.length());
+        if (channelId.isBlank()) return;
+        channelRegistry.join(channelId, participantId, sessionId);
     }
 
     @EventListener
