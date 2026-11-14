@@ -1,4 +1,4 @@
-package com.safepath.backend.user;
+package com.safepath.backend.user.service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
