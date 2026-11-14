@@ -30,7 +30,7 @@ public class LocalEventMediaStorage implements EventMediaStorage {
     public StoredFile store(MultipartFile file) {
         if (file.isEmpty()) throw ApiException.badRequest("빈 파일은 업로드할 수 없습니다.");
         if (file.getSize() > MAX_FILE_BYTES) {
-            throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE", "파일은 10MB 이하여야 합니다.");
+            throw new ApiException(HttpStatus.CONTENT_TOO_LARGE, "FILE_TOO_LARGE", "파일은 10MB 이하여야 합니다.");
         }
         String key = UUID.randomUUID().toString();
         Path temporary = null;

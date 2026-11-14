@@ -4,14 +4,23 @@ import com.safepath.backend.guardianrisk.ApiException;
 import com.safepath.backend.guardian.GuardianModels.*;
 import com.safepath.backend.guardianrisk.CurrentUser.Actor;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class GuardianRegistrationService {
+    private static final Logger log = LoggerFactory.getLogger(GuardianRegistrationService.class);
     private final GuardianRepository repository;
+    private final GuardianRequestNotifier notifier;
 
-    public GuardianRegistrationService(GuardianRepository repository) { this.repository = repository; }
+    public GuardianRegistrationService(GuardianRepository repository, GuardianRequestNotifier notifier) {
+        this.repository = repository;
+        this.notifier = notifier;
+    }
 
     @Transactional
     public Registration requestRegistration(Actor actor, long guardianId) {
@@ -25,8 +34,35 @@ public class GuardianRegistrationService {
             throw ApiException.conflict("같은 사용자와 보호자의 등록이 이미 있습니다.");
         }
         // ON CONFLICT also covers another request inserting the same pair after the lookup.
-        return repository.request(actor.id(), guardianId)
+        Registration registration = repository.request(actor.id(), guardianId)
                 .orElseThrow(() -> ApiException.conflict("같은 사용자와 보호자의 등록이 이미 있습니다."));
+        notifyGuardianAfterCommit(actor.id(), guardianId);
+        return registration;
+    }
+
+    /** The notification module expects this push right after the request is saved. */
+    private void notifyGuardianAfterCommit(long requesterId, long guardianId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            notifyGuardian(requesterId, guardianId);
+            return;
+        }
+        // A rolled-back request never reaches afterCommit, so no push is sent for it.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                notifyGuardian(requesterId, guardianId);
+            }
+        });
+    }
+
+    private void notifyGuardian(long requesterId, long guardianId) {
+        try {
+            notifier.notifyGuardianRequested(requesterId, guardianId);
+        } catch (RuntimeException exception) {
+            // The registration is already saved; a push failure must not turn it into an error.
+            log.error("Guardian request notification failed: requesterId={}, guardianId={}",
+                    requesterId, guardianId, exception);
+        }
     }
 
     @Transactional
@@ -68,7 +104,8 @@ public class GuardianRegistrationService {
     @Transactional
     public Registration updatePermission(Actor actor, long id, PermissionRequest permissions) {
         Registration registration = get(id, true);
-        if (!actor.admin()) actor.requireOwner(registration.userId());
+        // Ownership first: the owner's request needs no Firebase admin lookup.
+        if (actor.id() != registration.userId()) actor.requireAdmin();
         requireState(registration, Status.ACCEPTED);
         repository.setPermissions(id, permissions);
         return get(id, false);
@@ -86,8 +123,9 @@ public class GuardianRegistrationService {
     }
 
     private void requirePartyOrAdmin(Actor actor, Registration registration) {
-        if (!actor.admin() && actor.id() != registration.userId() && actor.id() != registration.guardianId()) {
-            throw ApiException.forbidden();
+        // Parties are checked first so they never need the Firebase admin lookup.
+        if (actor.id() != registration.userId() && actor.id() != registration.guardianId()) {
+            actor.requireAdmin();
         }
     }
 

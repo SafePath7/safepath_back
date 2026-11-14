@@ -5,6 +5,7 @@ gradle.beforeProject { project ->
         if (project == project.rootProject) {
             project.dependencies.add('implementation', 'software.amazon.awssdk:s3:2.57.12')
             project.sourceSets.main.java.srcDir('src/s3/java')
+            project.sourceSets.test.java.srcDir('src/s3Test/java')
         }
     }
 }

@@ -1,5 +1,8 @@
 package com.safepath.backend.guardianrisk;
 
+import java.util.Objects;
+import java.util.function.BooleanSupplier;
+
 import com.safepath.backend.user.UserService;
 
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -26,16 +29,51 @@ public class CurrentUser {
         if (uid == null || uid.isBlank()) throw ApiException.forbidden();
         long id = users.findUserIdByFirebaseUid(uid)
                 .orElseThrow(() -> ApiException.notFound("회원"));
-        return new Actor(id, roles.isAdmin(uid));
+        // The admin claim costs a Firebase network call, so it is read only when a
+        // request actually depends on it (and at most once per request).
+        return new Actor(id, () -> roles.isAdmin(uid));
     }
 
-    public record Actor(long id, boolean admin) {
+    public static final class Actor {
+        private final long id;
+        private final BooleanSupplier adminLookup;
+        private Boolean admin;
+
+        public Actor(long id, boolean admin) {
+            this.id = id;
+            this.admin = admin;
+            this.adminLookup = null;
+        }
+
+        Actor(long id, BooleanSupplier adminLookup) {
+            this.id = id;
+            this.adminLookup = Objects.requireNonNull(adminLookup);
+        }
+
+        public long id() { return id; }
+
+        public boolean admin() {
+            if (admin == null) admin = adminLookup.getAsBoolean();
+            return admin;
+        }
+
         public void requireAdmin() {
-            if (!admin) throw ApiException.forbidden();
+            if (!admin()) throw ApiException.forbidden();
         }
 
         public void requireOwner(long ownerId) {
             if (id != ownerId) throw ApiException.forbidden();
         }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Actor actor && id == actor.id && admin() == actor.admin();
+        }
+
+        @Override
+        public int hashCode() { return Long.hashCode(id); }
+
+        @Override
+        public String toString() { return "Actor[id=" + id + "]"; }
     }
 }

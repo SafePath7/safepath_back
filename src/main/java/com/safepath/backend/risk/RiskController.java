@@ -1,7 +1,5 @@
 package com.safepath.backend.risk;
 
-import java.util.UUID;
-
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 
@@ -19,17 +17,6 @@ public class RiskController {
     private final CurrentUser users;
 
     public RiskController(RiskService service, CurrentUser users) { this.service = service; this.users = users; }
-
-    @PostMapping("/locations")
-    @ResponseStatus(HttpStatus.CREATED)
-    public Location saveLocation(Authentication auth, @Valid @RequestBody LocationRequest request) {
-        return service.saveLocation(users.resolve(auth), request);
-    }
-
-    @GetMapping("/sessions/{sessionId}/locations/latest")
-    public Location getLatestLocation(Authentication auth, @PathVariable UUID sessionId) {
-        return service.getLatestLocation(users.resolve(auth), sessionId);
-    }
 
     @PostMapping("/risk-events")
     @ResponseStatus(HttpStatus.CREATED)

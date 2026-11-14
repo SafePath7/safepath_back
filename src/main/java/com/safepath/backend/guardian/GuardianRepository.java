@@ -83,16 +83,4 @@ public class GuardianRepository {
                 """, (short) (permissions.canViewLocation() ? 1 : 0), (short) (permissions.canViewStatus() ? 1 : 0),
                 (short) (permissions.canViewPersonalInfo() ? 1 : 0), id);
     }
-
-    public boolean allows(long ownerId, long guardianId, PermissionType type) {
-        String column = switch (type) {
-            case LOCATION -> "can_view_location";
-            case STATUS -> "can_view_status";
-            case PERSONAL_INFO -> "can_view_personal_info";
-        };
-        return Boolean.TRUE.equals(jdbc.queryForObject("""
-                SELECT EXISTS (SELECT 1 FROM guardian_registrations
-                WHERE user_id = ? AND guardian_id = ? AND status = 'ACCEPTED' AND
-                """ + column + " = 1)", Boolean.class, ownerId, guardianId));
-    }
 }
