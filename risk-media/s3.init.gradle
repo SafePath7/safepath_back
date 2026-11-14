@@ -1,0 +1,11 @@
+// Opt-in S3 build for the risk/media module. The shared build.gradle stays read-only.
+// Usage: gradlew.bat --init-script risk-media/s3.init.gradle clean build
+gradle.beforeProject { project ->
+    project.plugins.withId('java') {
+        if (project == project.rootProject) {
+            project.dependencies.add('implementation', 'software.amazon.awssdk:s3:2.57.12')
+            project.sourceSets.main.java.srcDir('src/s3/java')
+            project.sourceSets.test.java.srcDir('src/s3Test/java')
+        }
+    }
+}
