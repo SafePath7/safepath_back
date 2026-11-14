@@ -6,6 +6,7 @@ import com.safepath.backend.config.SecurityConfig;
 import com.safepath.backend.session.exception.SafeReturnSessionExceptionHandler;
 import com.safepath.backend.session.service.SafeReturnSessionService;
 import com.safepath.backend.session.store.ActiveSessionStore;
+import com.safepath.backend.session.store.SelectedGuardianStore;
 import com.safepath.backend.user.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -235,6 +236,7 @@ class SafeReturnSessionControllerTest {
 			SafeReturnSessionController.class,
 			SafeReturnSessionExceptionHandler.class,
 			ActiveSessionStore.class,
+			SelectedGuardianStore.class,
 			SafeReturnSessionService.class
 	})
 	static class TestWebConfiguration {

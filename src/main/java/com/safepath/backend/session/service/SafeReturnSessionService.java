@@ -2,6 +2,7 @@ package com.safepath.backend.session.service;
 
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.store.ActiveSessionStore;
+import com.safepath.backend.session.store.SelectedGuardianStore;
 import com.safepath.backend.session.store.ActiveSessionStore.RemovalResult;
 import org.springframework.stereotype.Service;
 
@@ -14,9 +15,11 @@ import java.util.UUID;
 public class SafeReturnSessionService {
 
 	private final ActiveSessionStore activeSessionStore;
+	private final SelectedGuardianStore selectedGuardianStore;
 
-	public SafeReturnSessionService(ActiveSessionStore activeSessionStore) {
+	public SafeReturnSessionService(ActiveSessionStore activeSessionStore, SelectedGuardianStore selectedGuardianStore) {
 		this.activeSessionStore = activeSessionStore;
+		this.selectedGuardianStore = selectedGuardianStore;
 	}
 
 	public ActiveSession startSession(Long userId) {
@@ -54,12 +57,13 @@ public class SafeReturnSessionService {
 			throw new IllegalArgumentException("userId must be a positive number");
 		}
 
-		RemovalResult result = activeSessionStore.removeIfOwned(sessionId, userId);
-		switch (result) {
-			case REMOVED -> {
+		synchronized (activeSessionStore) {
+			RemovalResult result = activeSessionStore.removeIfOwned(sessionId, userId);
+			switch (result) {
+				case REMOVED -> selectedGuardianStore.remove(sessionId);
+				case NOT_FOUND -> throw new NoSuchElementException("Active session not found");
+				case NOT_OWNER -> throw new SecurityException("User is not the owner of this active session");
 			}
-			case NOT_FOUND -> throw new NoSuchElementException("Active session not found");
-			case NOT_OWNER -> throw new SecurityException("User is not the owner of this active session");
 		}
 	}
 }
