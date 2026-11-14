@@ -3,6 +3,7 @@ package com.safepath.backend.websocket;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -22,7 +23,7 @@ public class InMemoryChannelRegistry {
         participantIds.addAll(guardianIds);
 
         String channelId = UUID.randomUUID().toString();
-        channels.put(channelId, new Channel(participantIds));
+        channels.put(channelId, new Channel(userId, participantIds));
         return channelId;
     }
 
@@ -33,6 +34,11 @@ public class InMemoryChannelRegistry {
     public boolean isParticipant(String channelId, Long participantId) {
         Channel channel = channels.get(channelId);
         return channel != null && participantId != null && channel.participantIds().contains(participantId);
+    }
+
+    public boolean isLocationPublisher(String channelId, Long participantId) {
+        Channel channel = channels.get(channelId);
+        return channel != null && participantId != null && channel.userId().equals(participantId);
     }
 
     public void join(String channelId, Long participantId, String sessionId) {
@@ -51,6 +57,11 @@ public class InMemoryChannelRegistry {
         return channel != null && channel.sessions().containsKey(sessionId);
     }
 
+    public Optional<Long> participantIdForSession(String channelId, String sessionId) {
+        Channel channel = channels.get(channelId);
+        return channel == null ? Optional.empty() : Optional.ofNullable(channel.sessions().get(sessionId));
+    }
+
     public void leaveAll(String sessionId) {
         channels.forEach((channelId, channel) -> channel.sessions().remove(sessionId));
     }
@@ -60,11 +71,12 @@ public class InMemoryChannelRegistry {
     }
 
     private record Channel(
+            Long userId,
             Set<Long> participantIds,
             ConcurrentMap<String, Long> sessions
     ) {
-        private Channel(Set<Long> participantIds) {
-            this(Set.copyOf(participantIds), new ConcurrentHashMap<>());
+        private Channel(Long userId, Set<Long> participantIds) {
+            this(userId, Set.copyOf(participantIds), new ConcurrentHashMap<>());
         }
     }
 }

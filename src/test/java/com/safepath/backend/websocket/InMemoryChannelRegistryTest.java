@@ -38,6 +38,15 @@ class InMemoryChannelRegistryTest {
     }
 
     @Test
+    void allowsOnlyTheChannelUserToPublishLocation() {
+        InMemoryChannelRegistry registry = new InMemoryChannelRegistry();
+        String channelId = registry.open(1L, Set.of(2L));
+
+        assertTrue(registry.isLocationPublisher(channelId, 1L));
+        assertFalse(registry.isLocationPublisher(channelId, 2L));
+    }
+
+    @Test
     void leavingRemovesOnlyWebSocketSession() {
         InMemoryChannelRegistry registry = new InMemoryChannelRegistry();
         String channelId = registry.open(1L, Set.of(2L));
