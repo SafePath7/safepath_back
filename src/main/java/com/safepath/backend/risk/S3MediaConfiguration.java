@@ -11,7 +11,10 @@ import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 
-/** Included by risk-media/s3.init.gradle without changing the shared build file. */
+/**
+ * Select with safepath.media.provider=s3 and safepath.media.s3.bucket;
+ * safepath.media.s3.region defaults to ap-northeast-2.
+ */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "safepath.media.provider", havingValue = "s3")
 public class S3MediaConfiguration {
