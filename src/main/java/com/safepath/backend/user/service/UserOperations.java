@@ -5,23 +5,14 @@ import com.safepath.backend.user.repository.UserRepository;
 import java.util.Optional;
 import com.safepath.backend.user.dto.UserResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 @RequiredArgsConstructor
 public class UserOperations {
-    private final JdbcTemplate jdbc;
     private final UserRepository users;
 
-    public UserOperations(JdbcTemplate jdbc) {
-        this(jdbc, null);
-    }
-
     public Optional<Long> findUserIdByFirebaseUid(String uid) {
-        if (users != null) return users.findByFirebaseUid(uid).map(user -> user.getId());
-        // Compatibility for callers using the original JDBC-only constructor.
-        return jdbc.query("SELECT id FROM users WHERE firebase_uid = ?",
-                (rs, rowNum) -> rs.getLong("id"), uid).stream().findFirst();
+        return users.findByFirebaseUid(uid).map(user -> user.getId());
     }
 
     public Optional<UserResponse> findProfile(String uid, PhoneProtection phones) {
@@ -52,7 +43,7 @@ public class UserOperations {
     }
 
     private void lockUid(String uid) {
-        jdbc.queryForObject("SELECT pg_advisory_xact_lock(hashtext(?)) IS NULL", Boolean.class, uid);
+        users.lockUid(uid);
     }
 
     // 회원 탈퇴
@@ -62,8 +53,7 @@ public class UserOperations {
     public void withdraw(String uid) {
         lockUid(uid);
         // 사용자 조회와 잠금 (탈퇴 되는 동안 사용자 행을 잠금)
-        Long userId = jdbc.query("SELECT id FROM users WHERE firebase_uid = ? FOR UPDATE",
-                (rs, rowNum) -> rs.getLong("id"), uid).stream().findFirst().orElse(null);
+        Long userId = users.findForUpdateByFirebaseUid(uid).map(user -> user.getId()).orElse(null);
         if (userId == null) {
             return;
         }
@@ -71,13 +61,7 @@ public class UserOperations {
         // 삭제해야 할 파일이 있는지 확인
         // 1. 본인의 음성 프로필이 있는 경우
         // 2. 본인의 귀가 세션에 저장소 URL이 있는 위험 이벤트 미디어가 연결된 경우
-        Boolean hasFiles = jdbc.queryForObject("""
-                SELECT EXISTS (SELECT 1 FROM voice_profiles WHERE user_id = ?)
-                    OR EXISTS (SELECT 1 FROM risk_event_medias m
-                        JOIN risk_events e ON e.id = m.event_id
-                        JOIN safe_return_sessions s ON s.id = e.session_id
-                        WHERE s.user_id = ? AND m.storage_url IS NOT NULL AND btrim(m.storage_url) <> '')
-                """, Boolean.class, userId, userId);
+        boolean hasFiles = users.hasFiles(userId);
         if (Boolean.TRUE.equals(hasFiles)) {
             throw new FileDeletionUnavailableException();
         }
@@ -88,19 +72,12 @@ public class UserOperations {
         // 3. 위험 이벤트: 본인의 귀가 세션에 연결된 이벤트
         // 4. 귀가 세션: 본인이 소유한 세션
         // 5. 음성 프로필과 사용자 행
-        jdbc.update("DELETE FROM guardian_registrations WHERE user_id = ? OR guardian_id = ?", userId, userId);
-        jdbc.update("""
-                DELETE FROM risk_event_medias WHERE event_id IN (
-                    SELECT e.id FROM risk_events e JOIN safe_return_sessions s ON s.id = e.session_id
-                    WHERE s.user_id = ?)
-                """, userId);
-        jdbc.update("""
-                DELETE FROM risk_events WHERE session_id IN
-                    (SELECT id FROM safe_return_sessions WHERE user_id = ?)
-                """, userId);
-        jdbc.update("DELETE FROM safe_return_sessions WHERE user_id = ?", userId);
-        jdbc.update("DELETE FROM voice_profiles WHERE user_id = ?", userId);
-        jdbc.update("DELETE FROM users WHERE id = ?", userId);
+        users.deleteGuardianRegistrations(userId);
+        users.deleteRiskEventMedias(userId);
+        users.deleteRiskEvents(userId);
+        users.deleteSessions(userId);
+        users.deleteVoiceProfiles(userId);
+        users.deleteById(userId);
     }
 
     public static class FileDeletionUnavailableException extends RuntimeException {}

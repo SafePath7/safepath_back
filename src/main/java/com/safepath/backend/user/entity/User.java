@@ -33,7 +33,7 @@ public class User {
     @Column(nullable = false, unique = true, length = 255)
     @Getter
     private String email;
-    // Insert and update timestamps are managed by existing SQL and database defaults.
+
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private LocalDateTime createdAt;
     @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
