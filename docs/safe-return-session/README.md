@@ -164,3 +164,12 @@ Controller 테스트는 Firebase 토큰 검증 결과와 사용자 DB 조회를 
 
 - 세션 상태 및 추가 필드는 관련 명세가 승인된 후 반영
 - 메모리 저장소와 향후 세션 서비스 및 위험 확정 처리 기능 간의 연동 방식 협의
+
+## 선택 보호자 종료 정리
+
+SafeReturnSessionService는 SelectedGuardianStore도 생성자로 주입받는다.
+정상 종료 시 기존 소유권 검사와 두 활성 세션 인덱스 제거를 유지하면서,
+같은 세션 UUID의 선택 보호자 목록도 삭제한다. 종료 실패 시 목록은 변경하지 않는다.
+선택 저장의 활성 확인과 종료 정리는 동일 ActiveSessionStore 잠금으로 조정한다.
+자세한 내부 계약과 테스트는 ../guardian-monitoring/README.md를 참고한다.
+기존 REST URL, Request, Response 및 Firebase 인증 흐름은 변경하지 않는다.
