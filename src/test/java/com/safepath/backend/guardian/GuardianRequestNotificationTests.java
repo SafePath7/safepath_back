@@ -1,12 +1,14 @@
 package com.safepath.backend.guardian;
 
-import java.time.Instant;
 import java.util.Optional;
 
-import com.safepath.backend.guardian.GuardianModels.Registration;
-import com.safepath.backend.guardian.GuardianModels.Status;
-import com.safepath.backend.guardianrisk.ApiException;
-import com.safepath.backend.guardianrisk.CurrentUser.Actor;
+import com.safepath.backend.common.auth.CurrentUser.Actor;
+import com.safepath.backend.common.exception.ApiException;
+import com.safepath.backend.guardian.entity.GuardianRegistration;
+import com.safepath.backend.guardian.entity.RegistrationStatus;
+import com.safepath.backend.guardian.repository.GuardianRegistrationRepository;
+import com.safepath.backend.guardian.service.GuardianRegistrationService;
+import com.safepath.backend.guardian.service.GuardianRequestNotifier;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,20 +18,22 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class GuardianRequestNotificationTests {
     private static final long OWNER = 10;
     private static final long GUARDIAN = 20;
-    private final GuardianRepository repository = mock(GuardianRepository.class);
+    private final GuardianRegistrationRepository repository = mock(GuardianRegistrationRepository.class);
     private final GuardianRequestNotifier notifier = mock(GuardianRequestNotifier.class);
     private final GuardianRegistrationService service = new GuardianRegistrationService(repository, notifier);
 
     @BeforeEach
     void startTransactionSynchronization() {
         TransactionSynchronizationManager.initSynchronization();
-        when(repository.userExists(anyLong())).thenReturn(true);
-        when(repository.findRegistration(OWNER, GUARDIAN)).thenReturn(Optional.empty());
+        when(repository.memberExists(anyLong())).thenReturn(true);
     }
 
     @AfterEach
@@ -39,9 +43,11 @@ class GuardianRequestNotificationTests {
 
     @Test
     void guardianIsNotifiedOnlyAfterTheRequestCommits() {
-        when(repository.request(OWNER, GUARDIAN)).thenReturn(Optional.of(pending()));
+        insertSucceeds();
 
-        assertThat(service.requestRegistration(new Actor(OWNER, false), GUARDIAN)).isEqualTo(pending());
+        var response = service.requestRegistration(new Actor(OWNER, false), GUARDIAN);
+        assertThat(response.id()).isEqualTo(1);
+        assertThat(response.status()).isEqualTo(RegistrationStatus.PENDING);
         verifyNoInteractions(notifier);
 
         commit();
@@ -50,7 +56,7 @@ class GuardianRequestNotificationTests {
 
     @Test
     void notificationFailureDoesNotFailTheSavedRequest() {
-        when(repository.request(OWNER, GUARDIAN)).thenReturn(Optional.of(pending()));
+        insertSucceeds();
         doThrow(new IllegalStateException("FirebaseApp is not initialized"))
                 .when(notifier).notifyGuardianRequested(OWNER, GUARDIAN);
 
@@ -61,8 +67,9 @@ class GuardianRequestNotificationTests {
     }
 
     @Test
-    void rejectedRequestRegistersNoNotification() {
-        when(repository.request(OWNER, GUARDIAN)).thenReturn(Optional.empty());
+    void requestLosingTheInsertRaceRegistersNoNotification() {
+        when(repository.findByUserIdAndGuardianId(OWNER, GUARDIAN)).thenReturn(Optional.empty());
+        when(repository.insertIfAbsent(eq(OWNER), eq(GUARDIAN), any())).thenReturn(0);
 
         assertThatThrownBy(() -> service.requestRegistration(new Actor(OWNER, false), GUARDIAN))
                 .isInstanceOf(ApiException.class);
@@ -71,12 +78,29 @@ class GuardianRequestNotificationTests {
         verifyNoInteractions(notifier);
     }
 
+    @Test
+    void existingRegistrationIsAConflictWithoutAnInsert() {
+        when(repository.findByUserIdAndGuardianId(OWNER, GUARDIAN)).thenReturn(Optional.of(pending()));
+
+        assertThatThrownBy(() -> service.requestRegistration(new Actor(OWNER, false), GUARDIAN))
+                .isInstanceOf(ApiException.class);
+
+        verify(repository, never()).insertIfAbsent(anyLong(), anyLong(), any());
+        verifyNoInteractions(notifier);
+    }
+
+    /** No row before the insert, the new row after it. */
+    private void insertSucceeds() {
+        when(repository.findByUserIdAndGuardianId(OWNER, GUARDIAN))
+                .thenReturn(Optional.empty(), Optional.of(pending()));
+        when(repository.insertIfAbsent(eq(OWNER), eq(GUARDIAN), any())).thenReturn(1);
+    }
+
     private void commit() {
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
     }
 
-    private Registration pending() {
-        Instant now = Instant.parse("2026-11-14T00:00:00Z");
-        return new Registration(1, OWNER, GUARDIAN, Status.PENDING, now, null, false, false, false, now, now);
+    private GuardianRegistration pending() {
+        return GuardianRegistrations.of(1, OWNER, GUARDIAN, RegistrationStatus.PENDING, false, false);
     }
 }
