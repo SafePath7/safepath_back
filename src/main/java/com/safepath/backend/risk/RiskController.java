@@ -1,6 +1,11 @@
 package com.safepath.backend.risk;
 
 import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 
 import com.safepath.backend.risk.RiskModels.*;
@@ -22,6 +27,20 @@ public class RiskController {
     @ResponseStatus(HttpStatus.CREATED)
     public RiskEvent createEvent(Authentication auth, @Valid @RequestBody EventRequest request) {
         return service.createEvent(users.resolve(auth), request);
+    }
+
+    /** userId omitted: my own events. Another member's events need guardian STATUS permission. */
+    @GetMapping("/risk-events")
+    public List<RiskEventDetail> getEvents(Authentication auth,
+            @RequestParam(required = false) @Positive Long userId,
+            @RequestParam(required = false) UUID sessionId,
+            @RequestParam(defaultValue = "50") @Min(1) @Max(100) int limit) {
+        return service.getEvents(users.resolve(auth), userId, sessionId, limit);
+    }
+
+    @GetMapping("/risk-events/{eventId}")
+    public RiskEventDetail getEvent(Authentication auth, @PathVariable @Positive long eventId) {
+        return service.getEvent(users.resolve(auth), eventId);
     }
 
     @PatchMapping("/risk-events/{eventId}/status")

@@ -1,5 +1,6 @@
 package com.safepath.backend.risk;
 
+import java.util.List;
 import java.util.UUID;
 
 import com.safepath.backend.guardianrisk.ApiException;
@@ -14,11 +15,30 @@ public class RiskService {
     private final RiskRepository repository;
     private final RiskEventNotifications notifications;
     private final RiskSessionBridge sessions;
+    private final RiskEventAccess access;
 
-    public RiskService(RiskRepository repository, RiskEventNotifications notifications, RiskSessionBridge sessions) {
+    public RiskService(RiskRepository repository, RiskEventNotifications notifications, RiskSessionBridge sessions,
+            RiskEventAccess access) {
         this.repository = repository;
         this.notifications = notifications;
         this.sessions = sessions;
+        this.access = access;
+    }
+
+    @Transactional(readOnly = true)
+    public RiskEventDetail getEvent(Actor actor, long eventId) {
+        RiskEventDetail event = repository.eventDetail(eventId)
+                .orElseThrow(() -> ApiException.notFound("위험 이벤트"));
+        access.requireViewer(actor, event.userId());
+        return event;
+    }
+
+    /** A null userId means the caller's own events. */
+    @Transactional(readOnly = true)
+    public List<RiskEventDetail> getEvents(Actor actor, Long userId, UUID sessionId, int limit) {
+        long target = userId == null ? actor.id() : userId;
+        access.requireViewer(actor, target);
+        return repository.eventsOf(target, sessionId, limit);
     }
 
     @Transactional

@@ -52,11 +52,15 @@ class S3MediaApiDatabaseTests {
 
     @BeforeEach
     void setup() {
-        for (String table : new String[] {"users", "safe_return_sessions", "risk_events", "risk_event_medias"}) {
+        for (String table : new String[] {"users", "guardian_registrations", "safe_return_sessions", "risk_events", "risk_event_medias"}) {
             jdbc.execute("CREATE TEMP TABLE " + table + " (LIKE public." + table + " INCLUDING ALL) ON COMMIT DROP");
         }
         long owner = user("owner");
         user("admin");
+        user("stranger");
+        guardian(owner, "guardian", "ACCEPTED", 1);
+        guardian(owner, "no-status", "ACCEPTED", 0);
+        guardian(owner, "revoked", "REVOKED", 1);
         var session = UUID.randomUUID();
         jdbc.update("INSERT INTO safe_return_sessions (id,user_id,status,started_at) VALUES (?,?,'ACTIVE',CURRENT_TIMESTAMP)",
                 session, owner);
@@ -96,7 +100,10 @@ class S3MediaApiDatabaseTests {
         assertThat(row.get("uploaded_at")).isNotNull();
 
         mvc.perform(get(path(eventId)).header("Authorization", "Bearer admin"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(mediaId));
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(mediaId))
+                .andExpect(jsonPath("$[0].fileName").exists())
+                // The S3 location is internal and must not reach any client.
+                .andExpect(jsonPath("$[0].storageUrl").doesNotExist());
         mvc.perform(get(path(eventId)).param("mediaId", Long.toString(mediaId)).header("Authorization", "Bearer admin"))
                 .andExpect(status().isOk()).andExpect(content().bytes(bytes))
                 .andExpect(content().contentType("application/octet-stream"))
@@ -112,21 +119,52 @@ class S3MediaApiDatabaseTests {
     }
 
     @Test
-    void downloadRequiresAdminAndMatchingEventBeforeReadingS3() throws Exception {
+    void downloadRequiresAViewerAndMatchingEventBeforeReadingS3() throws Exception {
         long mediaId = upload();
         clearInvocations(s3);
         mvc.perform(get(path(eventId)).param("mediaId", Long.toString(mediaId))).andExpect(status().isUnauthorized());
-        mvc.perform(get(path(eventId)).param("mediaId", Long.toString(mediaId)).header("Authorization", "Bearer owner"))
-                .andExpect(status().isForbidden());
+        for (String uid : new String[] {"stranger", "no-status", "revoked"}) {
+            mvc.perform(get(path(eventId)).param("mediaId", Long.toString(mediaId)).header("Authorization", "Bearer " + uid))
+                    .andExpect(status().isForbidden());
+            mvc.perform(get(path(eventId)).header("Authorization", "Bearer " + uid))
+                    .andExpect(status().isForbidden());
+        }
         mvc.perform(get(path(otherEventId)).param("mediaId", Long.toString(mediaId)).header("Authorization", "Bearer admin"))
                 .andExpect(status().isNotFound());
         verifyNoInteractions(s3);
     }
 
+    @Test
+    void ownerAndStatusGuardianCanListAndDownloadMedia() throws Exception {
+        long mediaId = upload();
+        for (String uid : new String[] {"owner", "guardian"}) {
+            mvc.perform(get(path(eventId)).header("Authorization", "Bearer " + uid))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(mediaId));
+            mvc.perform(get(path(eventId)).param("mediaId", Long.toString(mediaId)).header("Authorization", "Bearer " + uid))
+                    .andExpect(status().isOk()).andExpect(content().bytes(bytes));
+        }
+    }
+
+    @Test
+    void uploadAndDeleteStayAdminOnlyEvenForViewers() throws Exception {
+        long mediaId = upload();
+        clearInvocations(s3);
+        for (String uid : new String[] {"owner", "guardian"}) {
+            mvc.perform(multipart(path(eventId)).file(new MockMultipartFile("file", "recording.wav", "audio/wav", bytes))
+                            .param("mediaType", "AUDIO").header("Authorization", "Bearer " + uid))
+                    .andExpect(status().isForbidden());
+            mvc.perform(delete(path(eventId) + "/" + mediaId).header("Authorization", "Bearer " + uid))
+                    .andExpect(status().isForbidden());
+        }
+        verifyNoInteractions(s3);
+        assertThat(objects).hasSize(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM risk_event_medias WHERE event_id=?", Integer.class, eventId)).isOne();
+    }
+
     private long upload() throws Exception {
         mvc.perform(multipart(path(eventId)).file(new MockMultipartFile("file", "recording.wav", "audio/wav", bytes))
                         .param("mediaType", "AUDIO").header("Authorization", "Bearer admin"))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.storageUrl").doesNotExist());
         return jdbc.queryForObject("SELECT id FROM risk_event_medias WHERE event_id=?", Long.class, eventId);
     }
 
@@ -134,6 +172,10 @@ class S3MediaApiDatabaseTests {
     private long user(String uid) {
         return jdbc.queryForObject("INSERT INTO users (firebase_uid,name,phone_hash,phone_encrypted,email) VALUES (?,'test',?,'test',?) RETURNING id",
                 Long.class, uid, uid, uid + "@example.test");
+    }
+    private void guardian(long owner, String uid, String status, int viewStatus) {
+        jdbc.update("INSERT INTO guardian_registrations (user_id,guardian_id,status,can_view_status) VALUES (?,?,?,?)",
+                owner, user(uid), status, viewStatus);
     }
     private long event(UUID session) {
         return jdbc.queryForObject("INSERT INTO risk_events (session_id,event_type,description) VALUES (?,'SOS','media test') RETURNING id",

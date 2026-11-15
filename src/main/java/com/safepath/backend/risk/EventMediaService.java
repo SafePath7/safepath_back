@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.safepath.backend.guardianrisk.ApiException;
 import com.safepath.backend.risk.RiskModels.Media;
+import com.safepath.backend.risk.RiskModels.MediaInfo;
 import com.safepath.backend.guardianrisk.CurrentUser.Actor;
 
 import org.slf4j.Logger;
@@ -20,14 +21,16 @@ public class EventMediaService {
     private static final Logger log = LoggerFactory.getLogger(EventMediaService.class);
     private final RiskRepository repository;
     private final EventMediaStorage storage;
+    private final RiskEventAccess access;
 
-    public EventMediaService(RiskRepository repository, EventMediaStorage storage) {
+    public EventMediaService(RiskRepository repository, EventMediaStorage storage, RiskEventAccess access) {
         this.repository = repository;
         this.storage = storage;
+        this.access = access;
     }
 
     @Transactional
-    public Media uploadEventMedia(Actor actor, long eventId, MultipartFile file, String mediaType) {
+    public MediaInfo uploadEventMedia(Actor actor, long eventId, MultipartFile file, String mediaType) {
         actor.requireAdmin();
         requireEvent(eventId, true);
         var stored = storage.store(file);
@@ -37,20 +40,18 @@ public class EventMediaService {
                 if (status == STATUS_ROLLED_BACK) cleanup(stored.key(), eventId);
             }
         });
-        return repository.insertMedia(eventId, mediaType, stored.fileName(), stored.key());
+        return MediaInfo.of(repository.insertMedia(eventId, mediaType, stored.fileName(), stored.key()));
     }
 
     @Transactional(readOnly = true)
-    public List<Media> getEventMedias(Actor actor, long eventId) {
-        actor.requireAdmin();
-        requireEvent(eventId, false);
-        return repository.medias(eventId);
+    public List<MediaInfo> getEventMedias(Actor actor, long eventId) {
+        requireViewer(actor, eventId);
+        return repository.medias(eventId).stream().map(MediaInfo::of).toList();
     }
 
     @Transactional(readOnly = true)
     public MediaDownload downloadEventMedia(Actor actor, long eventId, long mediaId) {
-        actor.requireAdmin();
-        requireEvent(eventId, false);
+        requireViewer(actor, eventId);
         Media media = repository.media(eventId, mediaId, false)
                 .orElseThrow(() -> ApiException.notFound("이벤트 미디어"));
         if (media.storageUrl() == null) throw ApiException.notFound("미디어 파일");
@@ -87,6 +88,12 @@ public class EventMediaService {
             });
         }
         repository.deleteMedia(eventId, mediaId);
+    }
+
+    /** Reading follows the event's own rule; upload and delete stay admin-only. */
+    private void requireViewer(Actor actor, long eventId) {
+        var event = repository.eventDetail(eventId).orElseThrow(() -> ApiException.notFound("위험 이벤트"));
+        access.requireViewer(actor, event.userId());
     }
 
     private void requireEvent(long eventId, boolean lock) {

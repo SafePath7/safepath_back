@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Positive;
 
-import com.safepath.backend.risk.RiskModels.Media;
+import com.safepath.backend.risk.RiskModels.MediaInfo;
 import com.safepath.backend.guardianrisk.CurrentUser;
 
 import org.springframework.http.HttpStatus;
@@ -30,13 +30,13 @@ public class EventMediaController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public Media uploadEventMedia(Authentication auth, @PathVariable @Positive long eventId,
+    public MediaInfo uploadEventMedia(Authentication auth, @PathVariable @Positive long eventId,
             @RequestParam MultipartFile file, @RequestParam @NotBlank @Size(max = 20) String mediaType) {
         return service.uploadEventMedia(users.resolve(auth), eventId, file, mediaType);
     }
 
     @GetMapping(params = "!mediaId")
-    public List<Media> getEventMedias(Authentication auth, @PathVariable @Positive long eventId) {
+    public List<MediaInfo> getEventMedias(Authentication auth, @PathVariable @Positive long eventId) {
         return service.getEventMedias(users.resolve(auth), eventId);
     }
 

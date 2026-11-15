@@ -60,6 +60,30 @@ public class RiskRepository {
                 EVENT, eventId).stream().findFirst();
     }
 
+    private static final RowMapper<RiskEventDetail> DETAIL = (rs, row) -> new RiskEventDetail(rs.getLong("id"),
+            rs.getLong("user_id"), rs.getObject("session_id", UUID.class), rs.getString("event_type"),
+            rs.getString("description"), rs.getString("status"), time(rs, "detected_at"),
+            time(rs, "created_at"), time(rs, "updated_at"));
+    private static final String DETAIL_SELECT = """
+            SELECT e.*, s.user_id FROM risk_events e
+            JOIN safe_return_sessions s ON s.id = e.session_id
+            """;
+
+    public Optional<RiskEventDetail> eventDetail(long eventId) {
+        return jdbc.query(DETAIL_SELECT + "WHERE e.id = ?", DETAIL, eventId).stream().findFirst();
+    }
+
+    /** The member's events, most recently detected first; a null sessionId means every session. */
+    public List<RiskEventDetail> eventsOf(long userId, UUID sessionId, int limit) {
+        if (sessionId == null) {
+            return jdbc.query(DETAIL_SELECT + "WHERE s.user_id = ? ORDER BY e.detected_at DESC, e.id DESC LIMIT ?",
+                    DETAIL, userId, limit);
+        }
+        return jdbc.query(DETAIL_SELECT
+                + "WHERE s.user_id = ? AND e.session_id = ? ORDER BY e.detected_at DESC, e.id DESC LIMIT ?",
+                DETAIL, userId, sessionId, limit);
+    }
+
     public RiskEvent updateStatus(long eventId, String status) {
         return jdbc.queryForObject("""
                 UPDATE risk_events SET status = ?, updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
