@@ -4,6 +4,9 @@ import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
+import com.safepath.backend.session.store.LatestLocationStore;
+import com.safepath.backend.session.store.SessionChannelStore;
+import com.safepath.backend.websocket.InMemoryChannelRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
@@ -25,9 +28,9 @@ class GuardianMonitoringServiceTest {
 	private final ActiveSessionStore activeSessionStore = new ActiveSessionStore();
 	private final SelectedGuardianStore selectedGuardianStore = new SelectedGuardianStore(activeSessionStore);
 	private final GuardianPermissionService permissionService = mock(GuardianPermissionService.class);
-	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore);
+	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new LatestLocationStore(activeSessionStore));
 	private final GuardianMonitoringService monitoringService = new GuardianMonitoringService(
-			activeSessionStore, permissionService, selectedGuardianStore);
+			activeSessionStore, permissionService, selectedGuardianStore, new LatestLocationStore(activeSessionStore));
 	private ActiveSession session;
 	private static final Long OWNER_ID = 42L;
 	private static final Long GUARDIAN_ID = 43L;

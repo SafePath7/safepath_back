@@ -3,7 +3,7 @@
 ## 범위와 구조
 
 메모리 기반 선택 보호자 관리와 권한 조회 계약, GuardianMonitoringService를 구현한다.
-REST API, 실제 보호자 권한 어댑터 및 위치 조회는 아직 없다.
+REST API와 실제 보호자 권한 어댑터, WebSocket 위치 수신 연결은 아직 없다. 내부 위치 조회와 선택 Service는 아래 후속 구현 절을 참고한다.
 
 - `session/model/MonitoringPermissionType`: `STATUS`, `LOCATION`
 - `session/store/SelectedGuardianStore`: 세션 `UUID`별 보호자 `Long` ID 집합
@@ -154,3 +154,118 @@ HTTP 요청/응답은 추가하지 않았으므로 이번 기능의 Postman 테�
 저장·종료 동시 실행 후 잔여 목록 없음, 비활성 세션 저장 거부.
 기존 생성자 변경에 맞춰 단위 테스트와 Controller 테스트의 Bean 구성을 함께 갱신했다.
 실제 Firebase·DB 통합 또는 Postman 테스트는 실행하지 않았다.
+## 사용자 전용 세션–채널 연동
+
+추가 구조:
+- session/store/SessionChannelStore: UUID → channelId 메모리 매핑
+- session/exception/SessionChannelException: 채널 수명주기 실패를 중복 시작과 구분
+- session/service/SessionChannelLifecycleTest 및 store/SessionChannelStoreTest: 실패 보상·재시도·동시성 검증
+
+SessionChannelStore.save(UUID, String)는 putIfAbsent로 중복 매핑을 거부한다.
+findBySessionId(UUID)는 Optional<String>, remove(UUID)는 삭제된 Optional<String>을 반환한다.
+removeIfMapped(UUID, String)는 값이 일치할 때만 삭제하여 다른 매핑을 덮어쓰거나 지우지 않는다.
+null UUID, null 또는 공백 channelId 저장은 거부한다. 단일 프로세스 전용이며 재시작 시 사라진다.
+이 Store는 내부 저장 수단으로, 공개 메서드 자체가 사용자 인증이나 활성 세션을 검증하지 않는다.
+
+startSession()은 기존 사용자당 중복 검사에 성공한 뒤 open(userId, Set.of())로 사용자 전용 채널을
+만들고 매핑을 저장한다. 생성·매핑 실패 시 이번 요청의 채널과 세션만 정리한다.
+전체 시작·종료 처리는 선택 저장과 동일한 ActiveSessionStore 잠금을 사용한다.
+이미 활성 세션이 있으면 open()에 도달하지 않아 추가 채널이 생성되지 않는다.
+
+endSession()은 세션 존재·소유권을 먼저 확인하고 채널 close()가 성공한 뒤 매핑·활성 세션·선택 목록을
+제거한다. close() 실패 시 이 정보들을 보존하므로 같은 종료 API로 재시도할 수 있다.
+예전 내부 경로에서 생성되어 매핑이 없는 활성 세션도 기존 방식으로 종료할 수 있다.
+close()는 채널 Registry만 지우며 WebSocket 연결·브로커 구독을 직접 종료하지 않는다.
+
+시작 실패 보상 중 close()도 실패하면 세션과 채널 ID를 보존해 종료 재시도를 지원한다.
+매핑 저장 자체와 보존 재시도까지 모두 실패한 다중 장애는 자동 복구를 보장하지 않는다.
+원래 실패와 후속 정리 실패는 예외 원인·suppressed exception으로 유지한다.
+현재 실제 Registry와 Store는 외부 I/O를 하지 않는다. open() 내부에서 실패하여 ID를 반환하지 않은
+리소스는 호출자가 정리할 수 없으므로 향후 Registry가 변경되면 생성의 실패 원자성도 유지해야 한다.
+
+SessionChannelException은 RuntimeException으로 기존 INTERNAL_ERROR / 500 응답을 사용한다.
+정상 중복 시작 IllegalStateException은 기존 ACTIVE_SESSION_CONFLICT / 409를 유지한다.
+새 HTTP 응답 필드·오류 코드·channelId 조회 API는 추가하지 않는다.
+ActiveSession과 ActiveSessionResponse 및 기존 API 요청·응답·인증은 변경하지 않는다.
+보호자 선택 목록이 있어도 채널에는 소유자만 등록한다. 보호자 실제 위치 공유는 활성화하지 않는다.
+
+후속 작업: 실제 권한 Service 어댑터, 선택·LOCATION 검증과 참가자 갱신, channelId 전달 API,
+구독 권한 및 취소 처리. 이번 연동에서는 팀원 WebSocket 코드와 경로·DTO를 수정하지 않는다.
+### 세션–채널 연동 테스트 결과
+
+```powershell
+.\gradlew.bat classes testClasses test --tests "com.safepath.backend.session.*" --tests "com.safepath.backend.websocket.*" --tests "com.safepath.backend.config.SecurityConfigIntegrationTest"
+```
+
+실제 결과: BUILD SUCCESSFUL, 세션 69개 + WebSocket 12개 + Security 3개 = 총 84개 통과.
+실패·오류·건너뜀 0. main/test 전체 소스 컴파일 성공.
+정상 시작·종료, 사용자 전용 참가자, 다른 세션 격리, 중복·동시 시작의 채널 1개 생성,
+채널 생성 실패·매핑 실패(저장 전/후)의 보상, 종료 실패 후 재시도,
+시작 보상 중 close 실패 후 종료 재시도, 채널 실패의 기존 HTTP 500 응답을 검증했다.
+Mockito는 테스트 내부에서만 사용한다. 실제 Firebase ID 토큰을 이용한 프론트 수동 테스트는 미실행이다.
+## 최신 위치 메모리 관리와 보호자 선택
+
+### 추가 구조
+
+- session/store/LatestLocationStore: 세션 UUID별 불변 LocationUpdateRequest 스냅샷 메모리 관리
+- session/service/GuardianSelectionService: 소유자 전용 선택·해제, 수락 관계 검증
+- GuardianMonitoringService.getMonitoredLocation(UUID, Long): 기존 LOCATION 권한 검증 후 최신 위치 반환
+
+기존 getMonitoringStatus()와 validateMonitoringPermission()은 재사용하며 중복 구현하지 않는다.
+로컬에 승인된 Notion 상세 요청·응답 JSON과 오류 계약이 없어 새 Controller는 추가하지 않는다.
+상태 조회 URL과 위치 조회 URL은 앞서 확인된 경로만 유지하고 이번에도 공개하지 않는다.
+
+### 위치 내부 계약
+
+updateLocation(UUID sessionId, Long userId, LocationUpdateRequest location)은 활성 세션 소유자만 허용한다.
+userId는 향후 연결 계층이 Firebase 인증 주체에서 확인한 DB ID여야 한다. 단순 ID 인자는 인증 증명이 아니다.
+위도·경도 범위와 유한값, 정확도 0 이상 유한값(또는 null), capturedAt 필수를 직접 검사한다.
+Bean Validation에만 의존하지 않아 내부 Java 호출에서도 잘못된 값을 저장하지 않는다.
+
+기존 WebSocket 요청 record는 불변이며 좌표·정확도·측정 시각을 담으므로 내부 스냅샷으로 재사용한다.
+LocationUpdateResponse는 채널·송신자·서버 수신 시각을 포함한 중계 응답이므로 REST 계약으로 채택하지 않는다.
+측정 시각 capturedAt이 더 최신일 때만 교체한다. 과거·동일 시각 데이터는 기존 값을 유지한다.
+위치 미수신은 활성 세션에 대해 Optional.empty(), 비활성 세션 조회·갱신은 NoSuchElementException이다.
+이는 내부 계약이며 HTTP 응답·오류·만료 기준이나 미래 측정 시각 허용 정책을 확정한 것이 아니다.
+
+LatestLocationStore.findBySessionId()는 내부 저장소 조회 수단이다. 보호자 조회는 반드시
+GuardianMonitoringService.getMonitoredLocation()으로 수락 관계·LOCATION·선택 상태를 검증해야 한다.
+getMonitoredLocation()은 검증과 조회 동안 세션 잠금을 유지한다. 권한 조회 장애는 전파하고 위치를 반환하지 않는다.
+안전귀가 정상 종료 시 위치를 삭제하며, 채널 정리 실패 등 종료 실패 시에는 재시도를 위해 위치도 유지한다.
+종료와 갱신은 같은 ActiveSessionStore 잠금을 사용하여 종료 후 위치가 다시 저장되는 경쟁을 막는다.
+단일 서버 메모리 전용이며 DB·JPA·마이그레이션·환경변수는 추가하지 않는다.
+
+### 보호자 선택 내부 계약
+
+selectGuardian(UUID sessionId, Long ownerId, Long guardianId)는 기존 getSessionStatus()로 활성·소유권을
+확인한 뒤 자기 자신 선택을 거부하고 GuardianPermissionService.hasAcceptedRelationship()를 호출한다.
+수락된 보호자만 기존 SelectedGuardianStore에 추가하며, 중복 선택은 목록을 중복시키지 않는다.
+선택은 열람 허가 자체가 아니다. STATUS·LOCATION은 각각 실제 조회 시 기존 검증으로 확인한다.
+
+deselectGuardian(UUID sessionId, Long ownerId, Long guardianId)는 소유자만 수행할 수 있다.
+반복 해제·미선택 해제는 동일한 결과다. 관계가 이미 취소되어도 제거할 수 있도록 해제에는 관계 조회가 필요 없다.
+선택·해제·종료는 같은 세션 잠금으로 조정한다. 다른 사용자는 목록을 변경할 수 없다.
+선택은 채널 참가자 변경이 아니며 사용자 전용 WebSocket 채널에 보호자를 추가하지 않는다.
+
+GuardianSelectionService와 GuardianMonitoringService는 실제 권한 구현체가 없어 Bean으로 등록하지 않는다.
+관계 검증은 테스트 내부 mock으로만 대체하며 운영 임시 허용 구현은 없다.
+팀원 PR 병합 후 권한 어댑터와 실제 Bean 구성을 함께 연결해야 한다.
+
+### 아직 연결하지 않은 부분
+
+- 김규식 담당 위치 수신: 인증된 송신자의 DB ID와 채널 ID → 안전귀가 UUID를 확인하여 updateLocation() 호출
+- WebSocket 기존 relay()·인터셉터·경로·DTO는 변경하지 않음. 현재 실제 수신 위치는 이 Store로 자동 저장되지 않음
+- 권한 조회를 수행하는 동안 세션 잠금을 유지하므로 추후 실제 DB 조회 지연과 종료의 상호작용 검토 필요
+- 프론트 API: 선택·해제 경로, 요청·응답, 상태 JSON, 위치 미수신·오류 응답 확정
+- 관계 변경·선택 해제 후 기존 WebSocket 구독 차단과 채널 참가자 갱신은 김규식 담당자와 후속 합의
+### 최신 위치·선택 기능 실행 결과 (2026-11-15)
+
+```powershell
+.\gradlew.bat classes testClasses test --tests "com.safepath.backend.session.*" --tests "com.safepath.backend.websocket.*" --tests "com.safepath.backend.config.SecurityConfigIntegrationTest"
+```
+
+실제 결과: BUILD SUCCESSFUL, 총 106개 통과, 실패·오류·건너뜀 0, main/test 소스 컴파일 성공.
+기존 84개 + LatestLocationStoreTest 7개 + GuardianSelectionServiceTest 8개 + MonitoredLocationTest 7개.
+정상·권한 거부·조회 장애·위치 역순·소유자 제한·종료 정리·종료 실패 시 보존·동시 요청을 검증했다.
+새 권한 테스트 mock은 테스트 내부에만 존재한다. 실제 Firebase·팀원 권한 Service를 이용한
+새 기능의 end-to-end 검증과 Postman 테스트는 미실행이며 Controller 계약 확정 후 수행한다.

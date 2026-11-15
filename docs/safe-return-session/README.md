@@ -173,3 +173,21 @@ SafeReturnSessionService는 SelectedGuardianStore도 생성자로 주입받는�
 선택 저장의 활성 확인과 종료 정리는 동일 ActiveSessionStore 잠금으로 조정한다.
 자세한 내부 계약과 테스트는 ../guardian-monitoring/README.md를 참고한다.
 기존 REST URL, Request, Response 및 Firebase 인증 흐름은 변경하지 않는다.
+## 사용자 전용 WebSocket 채널 연동
+
+세션 시작은 사용자당 활성 세션 저장 성공 후 사용자만 참가하는 채널을 생성하고,
+SessionChannelStore에 세션 UUID와 채널 ID를 매핑한다. 중복 요청은 채널을 추가 생성하지 않는다.
+생성·매핑 실패는 새로 만든 리소스만 보상 정리하고 기존 INTERNAL_ERROR 응답으로 처리한다.
+종료는 소유권 확인 후 채널 정리가 성공해야 매핑·활성 세션·선택 목록을 삭제한다.
+채널 정리 실패 시 상태를 보존하여 종료 재시도를 허용한다.
+API Request/Response와 ActiveSessionResponse(id, startedAt)는 유지하며 channelId는 공개하지 않는다.
+SafeReturnSessionService 생성자는 ActiveSessionStore, SelectedGuardianStore, SessionChannelStore,
+InMemoryChannelRegistry를 주입받는다. 모두 동일 애플리케이션 singleton을 사용한다.
+실패 보상과 후속 연동 제약은 ../guardian-monitoring/README.md를 참고한다.
+## 최신 위치 종료 정리
+
+SafeReturnSessionService는 LatestLocationStore를 추가로 주입받는다.
+정상 종료에서 선택 보호자 목록과 함께 해당 세션의 최신 위치 메모리도 삭제한다.
+위치 갱신은 동일한 ActiveSessionStore 잠금 안에서 활성 상태와 소유자를 검증한다.
+종료 실패 시 위치도 유지하고, 종료 완료 후 갱신은 거부한다.
+기존 API 요청·응답과 WebSocket 중계 흐름은 변경하지 않는다.
