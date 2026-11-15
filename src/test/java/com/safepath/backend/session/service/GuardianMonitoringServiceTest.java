@@ -28,9 +28,9 @@ class GuardianMonitoringServiceTest {
 	private final ActiveSessionStore activeSessionStore = new ActiveSessionStore();
 	private final SelectedGuardianStore selectedGuardianStore = new SelectedGuardianStore(activeSessionStore);
 	private final GuardianPermissionService permissionService = mock(GuardianPermissionService.class);
-	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new LatestLocationStore(activeSessionStore));
+	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new LatestLocationStore(activeSessionStore), new GuardianSelectionService(activeSessionStore, selectedGuardianStore, org.mockito.Mockito.mock(GuardianPermissionService.class)));
 	private final GuardianMonitoringService monitoringService = new GuardianMonitoringService(
-			activeSessionStore, permissionService, selectedGuardianStore, new LatestLocationStore(activeSessionStore));
+			activeSessionStore, permissionService, selectedGuardianStore, new LatestLocationStore(activeSessionStore), new SessionChannelStore());
 	private ActiveSession session;
 	private static final Long OWNER_ID = 42L;
 	private static final Long GUARDIAN_ID = 43L;

@@ -32,11 +32,23 @@
 
 | API 이름 | HTTP Method 및 경로 | Request JSON | 성공 Response JSON |
 |---|---|---|---|
-| 세션 시작 | `POST /api/safe-return/sessions` | 없음 | `201 Created`, 아래 세션 JSON |
+| 세션 시작 | `POST /api/safe-return/sessions` | `{"guardianIds":[2,3]}` | `201 Created`, `{id, startedAt, channelId}` |
 | 세션 상태 조회 | `GET /api/safe-return/sessions/{sessionId}/status` (`sessionId`: UUID) | 없음 | `200 OK`, 아래 세션 JSON |
 | 세션 종료 | `PATCH /api/safe-return/sessions/{sessionId}/end` (`sessionId`: UUID) | 없음 | `204 No Content`, body 없음 |
 
-세션 시작 및 조회 응답의 필드와 Java 자료형은 `id: UUID`, `startedAt: Instant`입니다. JSON에서는 각각 문자열로 직렬화됩니다. `userId` 및 `status` 필드는 포함하지 않습니다.
+세션 상태 조회 응답의 필드와 Java 자료형은 `id: UUID`, `startedAt: Instant`입니다. 시작 응답에는 실제 생성된 채널의 `channelId: String`도 포함됩니다. `userId` 및 `status` 필드는 포함하지 않습니다. 시작은 `StartSessionRequest`/`StartSessionResponse`, 상태 조회는 기존 `ActiveSessionResponse`를 사용합니다.
+
+시작 요청의 `guardianIds`는 최소 1명 이상이어야 하며, 전체 보호자가 수락 관계와 LOCATION 권한을 통과해야 합니다. 본인·유효하지 않은 ID를 거부하고, 중복 ID는 기존 Service 정책대로 하나로 합칩니다. 인증된 사용자의 ID만 사용합니다. Body 없는 구형 클라이언트는 이제 `400 INVALID_REQUEST`를 받으므로 프론트 업데이트가 필요합니다. 기존 내부 `startSession(Long)`은 보존하지만 REST에서는 사용하지 않습니다.
+
+시작 성공 응답 예시(실제 값은 요청마다 생성):
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "startedAt": "2026-11-15T09:00:00Z",
+  "channelId": "generated-channel-id"
+}
+```
 
 ```json
 {
@@ -47,7 +59,7 @@
 
 `ActiveSession` 모델에 상태값이 없으므로 `status` 필드는 반환하지 않습니다.
 
-현재 `session.exception.SafeReturnSessionExceptionHandler`는 `@RestControllerAdvice(assignableTypes = SafeReturnSessionController.class)`로 세션 Controller에만 적용됩니다. 오류 JSON은 `{ "code": String, "message": String }` 형식입니다.
+현재 `session.exception.SafeReturnSessionExceptionHandler`는 세션 Controller와 GuardianMonitoringController에 적용됩니다. 오류 JSON은 `{ "code": String, "message": String }` 형식입니다. 보안 필터가 Controller 진입 전에 거부한 요청은 기존 설정대로 상태 코드만 반환할 수 있습니다.
 
 ```json
 {
@@ -60,7 +72,7 @@
 |---|---|---|
 | `400 Bad Request` | `INVALID_SESSION_ID` 또는 `INVALID_REQUEST` | UUID 형식 오류 또는 잘못된 요청 |
 | `401 Unauthorized` | `UNAUTHENTICATED` | 인증 누락 또는 지원되지 않는 인증 |
-| `403 Forbidden` | `USER_NOT_REGISTERED` | 유효한 Firebase UID에 대응하는 가입 사용자가 없음 |
+| `403 Forbidden` | `USER_NOT_REGISTERED` | 미가입 또는 보호자 선택·모니터링 권한 거부. 기존 AccessDeniedException 매핑 유지로 코드·메시지가 권한 거부 사유를 세분하지 않음 |
 | `404 Not Found` | `SESSION_NOT_FOUND` | 세션 없음, 이미 종료됨, 또는 소유자가 다름 |
 | `409 Conflict` | `ACTIVE_SESSION_CONFLICT` | 동일 사용자의 활성 세션 중복 시작 |
 | `500 Internal Server Error` | `INTERNAL_ERROR` | 예상하지 못한 서버 오류(내부 예외 상세 내용은 노출하지 않음) |
@@ -74,6 +86,9 @@
 ```http
 POST http://127.0.0.1:8080/api/safe-return/sessions
 Authorization: Bearer <Firebase ID token>
+Content-Type: application/json
+
+{"guardianIds":[2,3]}
 ```
 
 ```http
@@ -191,3 +206,10 @@ SafeReturnSessionService는 LatestLocationStore를 추가로 주입받는다.
 위치 갱신은 동일한 ActiveSessionStore 잠금 안에서 활성 상태와 소유자를 검증한다.
 종료 실패 시 위치도 유지하고, 종료 완료 후 갱신은 거부한다.
 기존 API 요청·응답과 WebSocket 중계 흐름은 변경하지 않는다.
+## 시작 전 선택 보호자 내부 경로
+
+새 startSession(Long, Collection<Long>)은 보호자 전체의 ACCEPTED·LOCATION을 검증한 뒤
+세션·선택 목록·채널·매핑을 생성한다. 실패 보상은 선택 정보까지 정리한다.
+기존 body 없는 API와 startSession(Long)은 팀 승인 전까지 기존 사용자 전용 동작을 유지한다.
+신규 정책의 HTTP 요청 DTO와 오류 계약은 아직 반영하지 않는다.
+SafeReturnSessionService는 GuardianSelectionService를 추가 주입받으며 반대 방향 의존성은 없다.

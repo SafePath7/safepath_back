@@ -35,7 +35,7 @@ class SessionChannelLifecycleTest {
 	private final SelectedGuardianStore guardians = new SelectedGuardianStore(sessions);
 	private final SessionChannelStore mappings = spy(new SessionChannelStore());
 	private final InMemoryChannelRegistry channels = spy(new InMemoryChannelRegistry());
-	private final SafeReturnSessionService service = new SafeReturnSessionService(sessions, guardians, mappings, channels, new LatestLocationStore(sessions));
+	private final SafeReturnSessionService service = new SafeReturnSessionService(sessions, guardians, mappings, channels, new LatestLocationStore(sessions), new GuardianSelectionService(sessions, guardians, org.mockito.Mockito.mock(GuardianPermissionService.class)));
 
 	@Test
 	void startsExactlyOneOwnerOnlyChannelAndEndsItWithoutAffectingAnotherSession() {
