@@ -118,6 +118,28 @@ public class GuardianRegistrationService {
         return new PermissionResponse(registration.allows(type));
     }
 
+    /**
+     * For other modules: whether guardianId's registration for userId is accepted and
+     * which of LOCATION/STATUS it may view. No registration, or one that is not
+     * ACCEPTED (pending, rejected, revoked, suspended), yields all false.
+     */
+    @Transactional(readOnly = true)
+    public GuardianAccess getGuardianAccess(long userId, long guardianId) {
+        return repository.findRegistration(userId, guardianId)
+                .filter(registration -> registration.status() == Status.ACCEPTED)
+                .map(registration -> new GuardianAccess(true,
+                        registration.canViewLocation(), registration.canViewStatus()))
+                .orElse(GuardianAccess.NONE);
+    }
+
+    /** For other modules: true only for an ACCEPTED registration that grants the permission. */
+    @Transactional(readOnly = true)
+    public boolean hasGuardianPermission(long userId, long guardianId, PermissionType type) {
+        return repository.findRegistration(userId, guardianId)
+                .map(registration -> registration.allows(type))
+                .orElse(false);
+    }
+
     private Registration get(long id, boolean lock) {
         return repository.find(id, lock).orElseThrow(() -> ApiException.notFound("보호자 등록"));
     }
