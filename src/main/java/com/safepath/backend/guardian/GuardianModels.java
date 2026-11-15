@@ -11,6 +11,14 @@ public final class GuardianModels {
     public enum Status { PENDING, ACCEPTED, REJECTED, REVOKED, SUSPENDED }
     public enum PermissionType { LOCATION, STATUS, PERSONAL_INFO }
 
+    /** Which side of a registration the caller is on. */
+    public enum Role { USER, GUARDIAN }
+
+    /** A registration for list screens, with both members' names so no extra lookup is needed. */
+    public record RegistrationSummary(long id, long userId, String userName, long guardianId,
+            String guardianName, Status status, Instant requestedAt, Instant acceptedAt,
+            boolean canViewLocation, boolean canViewStatus, boolean canViewPersonalInfo) {}
+
     public record RegistrationRequest(@NotNull @Positive Long guardianId) {}
 
     public record PermissionRequest(@NotNull Boolean canViewLocation,

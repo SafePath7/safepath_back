@@ -65,6 +65,12 @@ public class GuardianRegistrationService {
         }
     }
 
+    /** The caller's own registrations only; role and status are optional filters. */
+    @Transactional(readOnly = true)
+    public java.util.List<RegistrationSummary> listRegistrations(Actor actor, Role role, Status status) {
+        return repository.findSummaries(actor.id(), role, status);
+    }
+
     @Transactional
     public Registration acceptRegistration(Actor actor, long id) { return respond(actor, id, Status.ACCEPTED); }
 

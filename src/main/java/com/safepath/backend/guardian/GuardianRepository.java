@@ -45,6 +45,32 @@ public class GuardianRepository {
                 MAPPER, guardianId);
     }
 
+    /**
+     * Registrations the member takes part in, newest first. A null role means either
+     * side; a null status means every status.
+     */
+    public List<RegistrationSummary> findSummaries(long memberId, Role role, Status status) {
+        String side = role == Role.USER ? "r.user_id = ?"
+                : role == Role.GUARDIAN ? "r.guardian_id = ?"
+                : "(r.user_id = ? OR r.guardian_id = ?)";
+        List<Object> args = new java.util.ArrayList<>();
+        args.add(memberId);
+        if (role == null) args.add(memberId);
+        if (status != null) args.add(status.name());
+        return jdbc.query("""
+                SELECT r.*, u.name AS user_name, g.name AS guardian_name
+                FROM guardian_registrations r
+                JOIN users u ON u.id = r.user_id
+                JOIN users g ON g.id = r.guardian_id
+                WHERE\s""" + side + (status == null ? "" : " AND r.status = ?") + " ORDER BY r.id DESC",
+                (rs, row) -> new RegistrationSummary(rs.getLong("id"), rs.getLong("user_id"),
+                        rs.getString("user_name"), rs.getLong("guardian_id"), rs.getString("guardian_name"),
+                        Status.valueOf(rs.getString("status")), time(rs, "requested_at"), time(rs, "accepted_at"),
+                        rs.getShort("can_view_location") == 1, rs.getShort("can_view_status") == 1,
+                        rs.getShort("can_view_personal_info") == 1),
+                args.toArray());
+    }
+
     public Optional<Registration> findRegistration(long userId, long guardianId) {
         return jdbc.query("SELECT * FROM guardian_registrations WHERE user_id = ? AND guardian_id = ?",
                 MAPPER, userId, guardianId).stream().findFirst();

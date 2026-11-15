@@ -24,6 +24,13 @@ public class GuardianRegistrationController {
         return service.requestRegistration(users.resolve(auth), request.guardianId());
     }
 
+    /** role=USER: guardians I asked for; role=GUARDIAN: requests sent to me; omitted: both. */
+    @GetMapping
+    public java.util.List<RegistrationSummary> listRegistrations(Authentication auth,
+            @RequestParam(required = false) Role role, @RequestParam(required = false) Status status) {
+        return service.listRegistrations(users.resolve(auth), role, status);
+    }
+
     @PatchMapping("/{registrationId}/accept")
     public Registration acceptRegistration(Authentication auth, @PathVariable @Positive long registrationId) {
         return service.acceptRegistration(users.resolve(auth), registrationId);
