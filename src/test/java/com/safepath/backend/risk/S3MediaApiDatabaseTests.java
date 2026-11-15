@@ -7,7 +7,9 @@ import java.util.UUID;
 
 import com.safepath.backend.auth.FirebaseTokenService;
 import com.safepath.backend.config.FirebaseConfig;
-import com.safepath.backend.guardianrisk.FirebaseAdminRoleLookup;
+import com.safepath.backend.common.auth.FirebaseAdminRoleLookup;
+import com.safepath.backend.risk.storage.EventMediaStorage;
+import com.safepath.backend.risk.storage.S3EventMediaStorage;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

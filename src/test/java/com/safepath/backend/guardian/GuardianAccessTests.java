@@ -1,12 +1,14 @@
 package com.safepath.backend.guardian;
 
-import java.time.Instant;
 import java.util.Optional;
 
-import com.safepath.backend.guardian.GuardianModels.GuardianAccess;
-import com.safepath.backend.guardian.GuardianModels.PermissionType;
-import com.safepath.backend.guardian.GuardianModels.Registration;
-import com.safepath.backend.guardian.GuardianModels.Status;
+import com.safepath.backend.guardian.dto.GuardianAccess;
+import com.safepath.backend.guardian.entity.GuardianRegistration;
+import com.safepath.backend.guardian.entity.PermissionType;
+import com.safepath.backend.guardian.entity.RegistrationStatus;
+import com.safepath.backend.guardian.repository.GuardianRegistrationRepository;
+import com.safepath.backend.guardian.service.GuardianRegistrationService;
+import com.safepath.backend.guardian.service.GuardianRequestNotifier;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -19,13 +21,13 @@ import static org.mockito.Mockito.when;
 class GuardianAccessTests {
     private static final long USER = 10;
     private static final long GUARDIAN = 20;
-    private final GuardianRepository repository = mock(GuardianRepository.class);
+    private final GuardianRegistrationRepository repository = mock(GuardianRegistrationRepository.class);
     private final GuardianRegistrationService service =
             new GuardianRegistrationService(repository, mock(GuardianRequestNotifier.class));
 
     @Test
     void acceptedRegistrationReportsItsOwnPermissions() {
-        registration(Status.ACCEPTED, true, false);
+        registration(RegistrationStatus.ACCEPTED, true, false);
 
         assertThat(service.getGuardianAccess(USER, GUARDIAN)).isEqualTo(new GuardianAccess(true, true, false));
         assertThat(service.hasGuardianPermission(USER, GUARDIAN, PermissionType.LOCATION)).isTrue();
@@ -33,8 +35,8 @@ class GuardianAccessTests {
     }
 
     @ParameterizedTest
-    @EnumSource(value = Status.class, names = "ACCEPTED", mode = EnumSource.Mode.EXCLUDE)
-    void registrationThatIsNotAcceptedGrantsNothingEvenWithPermissionFlags(Status status) {
+    @EnumSource(value = RegistrationStatus.class, names = "ACCEPTED", mode = EnumSource.Mode.EXCLUDE)
+    void registrationThatIsNotAcceptedGrantsNothingEvenWithPermissionFlags(RegistrationStatus status) {
         registration(status, true, true);
 
         assertThat(service.getGuardianAccess(USER, GUARDIAN)).isEqualTo(GuardianAccess.NONE);
@@ -44,16 +46,15 @@ class GuardianAccessTests {
 
     @Test
     void missingOrReversedRelationGrantsNothing() {
-        registration(Status.ACCEPTED, true, true);
-        when(repository.findRegistration(GUARDIAN, USER)).thenReturn(Optional.empty());
+        registration(RegistrationStatus.ACCEPTED, true, true);
+        when(repository.findByUserIdAndGuardianId(GUARDIAN, USER)).thenReturn(Optional.empty());
 
         assertThat(service.getGuardianAccess(GUARDIAN, USER)).isEqualTo(GuardianAccess.NONE);
         assertThat(service.hasGuardianPermission(GUARDIAN, USER, PermissionType.LOCATION)).isFalse();
     }
 
-    private void registration(Status status, boolean location, boolean viewStatus) {
-        Instant now = Instant.parse("2026-11-15T00:00:00Z");
-        when(repository.findRegistration(USER, GUARDIAN)).thenReturn(Optional.of(new Registration(
-                1, USER, GUARDIAN, status, now, null, location, viewStatus, false, now, now)));
+    private void registration(RegistrationStatus status, boolean location, boolean viewStatus) {
+        GuardianRegistration registration = GuardianRegistrations.of(1, USER, GUARDIAN, status, location, viewStatus);
+        when(repository.findByUserIdAndGuardianId(USER, GUARDIAN)).thenReturn(Optional.of(registration));
     }
 }
