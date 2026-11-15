@@ -35,9 +35,9 @@ class MonitoredLocationTest {
 	private final LatestLocationStore locations = spy(new LatestLocationStore(sessions));
 	private final InMemoryChannelRegistry channels = spy(new InMemoryChannelRegistry());
 	private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(sessions, selected,
-			new SessionChannelStore(), channels, locations);
+			new SessionChannelStore(), channels, locations, new GuardianSelectionService(sessions, selected, org.mockito.Mockito.mock(GuardianPermissionService.class)));
 	private final GuardianPermissionService permissions = mock(GuardianPermissionService.class);
-	private final GuardianMonitoringService monitoring = new GuardianMonitoringService(sessions, permissions, selected, locations);
+	private final GuardianMonitoringService monitoring = new GuardianMonitoringService(sessions, permissions, selected, locations, new SessionChannelStore());
 	private final ActiveSession session = lifecycle.startSession(42L);
 	private final LocationUpdateRequest measurement = new LocationUpdateRequest(37.5, 127, null, Instant.now());
 

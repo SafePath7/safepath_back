@@ -37,7 +37,7 @@ class SafeReturnSessionServiceTest {
 	void setUp() {
 		store = new ActiveSessionStore();
 		selectedGuardianStore = new SelectedGuardianStore(store);
-		service = new SafeReturnSessionService(store, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new LatestLocationStore(store));
+		service = new SafeReturnSessionService(store, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new LatestLocationStore(store), new GuardianSelectionService(store, selectedGuardianStore, org.mockito.Mockito.mock(GuardianPermissionService.class)));
 	}
 
 	@Test

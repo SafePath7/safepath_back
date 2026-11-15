@@ -5,30 +5,52 @@ import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
 import com.safepath.backend.session.store.LatestLocationStore;
+import com.safepath.backend.session.store.SessionChannelStore;
 import com.safepath.backend.websocket.dto.LocationUpdateRequest;
 import java.util.Optional;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.UUID;
 
+@Service
 public class GuardianMonitoringService {
 
 	private final ActiveSessionStore activeSessionStore;
 	private final GuardianPermissionService guardianPermissionService;
 	private final SelectedGuardianStore selectedGuardianStore;
 	private final LatestLocationStore latestLocationStore;
+	private final SessionChannelStore sessionChannelStore;
 
 	public GuardianMonitoringService(
 			ActiveSessionStore activeSessionStore,
 			GuardianPermissionService guardianPermissionService,
 			SelectedGuardianStore selectedGuardianStore,
-			LatestLocationStore latestLocationStore) {
+			LatestLocationStore latestLocationStore,
+			SessionChannelStore sessionChannelStore) {
 		this.activeSessionStore = Objects.requireNonNull(activeSessionStore);
 		this.guardianPermissionService = Objects.requireNonNull(guardianPermissionService);
 		this.selectedGuardianStore = Objects.requireNonNull(selectedGuardianStore);
 		this.latestLocationStore = Objects.requireNonNull(latestLocationStore);
+		this.sessionChannelStore = Objects.requireNonNull(sessionChannelStore);
+	}
+
+	/** requesterId is a trusted internal ID; HTTP callers use GuardianMonitoringQueryService. */
+	public String getChannelId(UUID sessionId, Long requesterId) {
+		if (sessionId == null || requesterId == null || requesterId <= 0) {
+			throw new IllegalArgumentException("Session and requester are required");
+		}
+		synchronized (activeSessionStore) {
+			ActiveSession session = activeSessionStore.findById(sessionId)
+					.orElseThrow(() -> new NoSuchElementException("Active session not found"));
+			if (!session.userId().equals(requesterId)) {
+				validateMonitoringPermission(sessionId, requesterId, MonitoringPermissionType.LOCATION);
+			}
+			return sessionChannelStore.findBySessionId(sessionId)
+					.orElseThrow(() -> new NoSuchElementException("Session channel not found"));
+		}
 	}
 
 	public ActiveSession getMonitoringStatus(UUID sessionId, Long guardianId) {
