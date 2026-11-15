@@ -5,13 +5,16 @@ import static org.mockito.Mockito.when;
 
 import com.safepath.backend.auth.FirebaseTokenService;
 import com.safepath.backend.config.FirebaseConfig;
+import com.safepath.backend.session.service.GuardianPermissionService;
+import com.safepath.backend.session.service.SafeReturnSessionService;
+import com.safepath.backend.session.store.SessionChannelStore;
+import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.user.UserService;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.Set;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -28,7 +31,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class WebSocketLocationIntegrationTest {
     @LocalServerPort int port;
-    @Autowired InMemoryChannelRegistry channels;
+    @Autowired SafeReturnSessionService sessions;
+    @Autowired SessionChannelStore mappings;
+    @MockitoBean GuardianPermissionService permissions;
     @MockitoBean FirebaseConfig firebaseConfig;
     @MockitoBean FirebaseTokenService tokens;
     @MockitoBean UserService users;
@@ -39,7 +44,10 @@ class WebSocketLocationIntegrationTest {
         when(tokens.verifyIdToken("guardian-token")).thenReturn("guardian-uid");
         when(users.findUserIdByFirebaseUid("user-uid")).thenReturn(Optional.of(1L));
         when(users.findUserIdByFirebaseUid("guardian-uid")).thenReturn(Optional.of(2L));
-        String channelId = channels.open(1L, Set.of(2L));
+        when(permissions.hasAcceptedRelationship(1L, 2L)).thenReturn(true);
+        when(permissions.hasPermission(1L, 2L, MonitoringPermissionType.LOCATION)).thenReturn(true);
+        var session = sessions.startSession(1L, List.of(2L));
+        String channelId = mappings.findBySessionId(session.id()).orElseThrow();
 
         StompSocket user = connect();
         StompSocket guardian = connect();
@@ -62,7 +70,7 @@ class WebSocketLocationIntegrationTest {
         } finally {
             user.close();
             guardian.close();
-            channels.close(channelId);
+            sessions.endSession(session.id(), 1L);
         }
     }
 
