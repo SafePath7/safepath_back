@@ -53,6 +53,39 @@ public class GuardianMonitoringService {
 		}
 	}
 
+	/**
+	 * Guardian-only boundary for a future STOMP hook. guardianId must come from the verified server session.
+	 * This does not decide the owner's subscription policy or register a broker subscription.
+	 */
+	public ActiveSession validateGuardianLocationSubscription(String channelId, Long guardianId) {
+		if (channelId == null || channelId.isBlank() || guardianId == null || guardianId <= 0) {
+			throw new IllegalArgumentException("Channel and authenticated guardian are required");
+		}
+		synchronized (activeSessionStore) {
+			UUID sessionId = sessionChannelStore.findSessionIdByChannelId(channelId)
+					.orElseThrow(() -> new NoSuchElementException("Session channel not found"));
+			if (sessionChannelStore.findBySessionId(sessionId).filter(channelId::equals).isEmpty()) {
+				throw new AccessDeniedException("Session channel mapping does not match");
+			}
+			return validateMonitoringPermission(sessionId, guardianId, MonitoringPermissionType.LOCATION);
+		}
+	}
+
+	public String getGuardianChannelId(UUID sessionId, Long guardianId) {
+		if (sessionId == null || guardianId == null || guardianId <= 0) {
+			throw new IllegalArgumentException("Session and authenticated guardian are required");
+		}
+		synchronized (activeSessionStore) {
+			String channelId = sessionChannelStore.findBySessionId(sessionId)
+					.orElseThrow(() -> new NoSuchElementException("Session channel not found"));
+			ActiveSession session = validateGuardianLocationSubscription(channelId, guardianId);
+			if (!session.id().equals(sessionId)) {
+				throw new AccessDeniedException("Session channel mapping does not match");
+			}
+			return channelId;
+		}
+	}
+
 	public ActiveSession getMonitoringStatus(UUID sessionId, Long guardianId) {
 		return validateMonitoringPermission(sessionId, guardianId, MonitoringPermissionType.STATUS);
 	}
