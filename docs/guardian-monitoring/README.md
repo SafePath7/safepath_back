@@ -11,8 +11,52 @@
 |---|---|---|
 | `GET /api/guardian/monitoring/sessions/{sessionId}/status` | `200 {id, startedAt}` | ACCEPTED + 선택 보호자 + STATUS |
 | `GET /api/guardian/monitoring/sessions/{sessionId}/location` | `200 {latitude, longitude, accuracyMeters, capturedAt}` | ACCEPTED + 선택 보호자 + LOCATION |
+| `GET /api/guardian/monitoring/sessions/{sessionId}/channel` | `200 {channelId}` | ACCEPTED + 선택 보호자 + LOCATION, 소유자 제외 |
 
-`sessionId`는 시작 응답의 UUID다. 상태 응답은 활성 세션의 ID와 시작 시각이며 별도 status 필드는 없다. 위치 측정 시각은 ISO-8601 UTC, 정확도 단위는 미터이며 accuracyMeters는 null일 수 있다. 위치 미수신은 권한 검사 후 `204 No Content`다. 소유자 본인은 보호자용 API를 사용할 수 없으며 기존 소유자 상태 API를 사용한다. 이 API는 보호자에게 channelId를 공개하지 않는다.
+`sessionId`는 시작 응답의 UUID다. 상태 응답은 활성 세션의 ID와 시작 시각이며 별도 status 필드는 없다. 위치 측정 시각은 ISO-8601 UTC, 정확도 단위는 미터이며 accuracyMeters는 null일 수 있다. 위치 미수신은 권한 검사 후 `204 No Content`다. 소유자 본인은 보호자용 API를 사용할 수 없으며 기존 소유자 상태 API를 사용한다. 상태·위치 응답에는 channelId를 추가하지 않고 별도 channel API로만 제공한다.
+
+### 보호자 채널 조회
+
+```http
+GET /api/guardian/monitoring/sessions/{sessionId}/channel
+Authorization: Bearer <guardian Firebase ID token>
+```
+
+Request body와 guardianId 파라미터는 사용하지 않는다. 성공은 `200 OK`이며 `MonitoringChannelResponse`는 다음 필드 하나만 반환한다.
+
+```json
+{"channelId":"generated-channel-id"}
+```
+
+Controller → GuardianMonitoringQueryService.getGuardianChannelId(UUID, Authentication) → GuardianMonitoringService.getGuardianChannelId(UUID, Long) 순서다. 인증 경계가 Firebase UID를 UserService로 DB 보호자 ID로 변환한다. Service는 기존 SessionChannelStore의 정방향 매핑을 읽은 뒤 validateGuardianLocationSubscription(channelId, guardianId)를 재사용하여 역방향 매핑·활성 세션·ACCEPTED·LOCATION·선택 여부를 검사한다. 검증된 세션 ID가 요청 sessionId와 같아야 반환한다. 종료 처리와 동일한 활성 세션 잠금을 사용한다.
+
+기존 getChannelId(UUID, Long)는 시작 응답 등 소유자 내부 호출에 그대로 사용하며, 신규 보호자 endpoint는 해당 소유자 허용 경로를 사용하지 않는다. 조회 예외는 허용으로 변환하지 않는다. 기존 예외 처리에 따라 미가입·권한 거부·소유자 접근은 403 USER_NOT_REGISTERED, 없는/종료된 세션·매핑 없음은 404 SESSION_NOT_FOUND, 잘못된 UUID는 400 INVALID_SESSION_ID, 권한 DB 장애는 500 INTERNAL_ERROR다. 응답에 channelId를 포함하지 않고 실패한다.
+
+프론트는 이미 알고 있는 sessionId와 보호자 본인의 토큰으로 channel API를 호출하고, 받은 channelId로 `/topic/connections/{channelId}/locations`를 구독한다. 모니터링 대상 sessionId를 보호자에게 알려주는 알림·목록 기능은 이번에 추가하지 않았다. 채널 조회 성공은 조회 시점의 권한 확인이며 이후 SUBSCRIBE 허용을 보장하지 않는다. 아래 session 인터셉터가 SUBSCRIBE에서 권한을 다시 검사한다. 기존 구독 취소 처리는 아직 미구현이다. 기존 WebSocket 담당 운영 파일·destination·상태/위치 API 계약은 변경하지 않았다.
+
+채널 조회 추가 검증: Controller 12개, Query 인증 경계 1개, 실제 어댑터·등록 Service를 사용하는 내부 검증 2개를 추가했다. 기존 177개를 유지해 대상 192개가 통과했으며 실패·오류·건너뜀은 0개다. Controller 테스트는 실제 Firebase 필터와 Service·Store를 사용하되 Firebase 검증·UserService·권한 인터페이스는 mock이다. 내부 검증은 Repository를 mock한다. 실제 Firebase 계정으로 Postman 성공 시나리오는 이번에 실행하지 않았다. 실행 명령은 아래 기존 회귀 명령과 동일하다.
+
+### session 인터셉터의 보호자 SUBSCRIBE 재검증
+
+- `session/websocket/GuardianLocationSubscriptionInterceptor`: 정확한 단일 channelId 위치 토픽의 SUBSCRIBE만 처리한다. CONNECT·SEND·DISCONNECT·UNSUBSCRIBE·heartbeat와 그 밖의 destination 처리는 기존 코드에 맡긴다.
+- `session/config/GuardianLocationSubscriptionConfiguration`: 기존 WebSocketConfig와 별도로 inbound 인터셉터를 등록한다. 높은 우선순위뿐 아니라 시작 시 실제 clientInboundChannel 목록에서 새 인터셉터가 기존 인증 인터셉터보다 앞인지 검사하고, 순서가 다르면 기동을 중단한다.
+
+```text
+CONNECT: session 인터셉터 통과 → 기존 인터셉터가 Firebase 토큰 검증·DB ID 저장
+SUBSCRIBE: session 인터셉터가 검증된 서버 세션 ID 확인
+           → 소유자는 기존 경로 유지 / 보호자는 validateGuardianLocationSubscription() 호출
+           → 성공 후 기존 인터셉터가 join() 한 번 수행 → broker 구독
+```
+
+실제 STOMP 테스트에서 SUBSCRIBE의 Principal은 null이고 기존 CONNECT가 서버 세션 속성에 저장한 Long DB 사용자 ID는 유지되는 것을 확인했다. 해당 속성 키는 `StompAuthenticationChannelInterceptor`의 클래스명 + `.authenticatedUserId`다. native guardianId/userId는 신원으로 사용하지 않는다. 검증된 서버 속성이 없으면 거부하며, Principal이 함께 있으면 인증 여부와 DB ID 일치도 확인한다. 기존 속성 키를 바꾸면 두 인터셉터의 연동 계약과 테스트도 함께 확인해야 한다.
+
+보호자 검증은 실제 기존 MonitoringService → Adapter → GuardianRegistrationService를 재사용한다. 구독 검증 실패나 조회 장애는 broker 및 기존 join() 이전에 예외로 전파된다. 허용되지 않은 다른 destination 차단, 직접 /topic SEND 차단, 기존 구독에 대한 권한 취소·세션 종료 후 수신 차단은 이번에 구현하지 않았다. 위치 수신→LatestLocationStore 자동 저장도 별도 과제다.
+
+기존 `WebSocketLocationIntegrationTest`는 채널을 직접 여는 준비 코드 대신 실제 세션 시작·선택 목록·매핑과 테스트 전용 권한 mock을 준비하도록 변경했다. 기존 중계 성공 검증은 유지하고 종료 Service로 메모리를 정리한다. 운영 Firebase 인증과 권한 검증의 우회 구현은 추가하지 않았다.
+
+실행 결과: 신규 단위 테스트 8개와 실제 STOMP 통합 테스트 9개를 추가하여 기존 192개를 포함한 대상 209개가 통과했다. 실패·오류·건너뜀 0개, main/test 컴파일 성공이다. 실제 inbound 체인의 순서 및 CONNECT 토큰 검증 → SUBSCRIBE 권한 검증 → 단일 join() 순서를 확인했다. B·C의 동시 구독 상태에서 A가 발행한 동일 위치 payload 수신을 검증했다. 미선택·미수락/관계 없음·STATUS만 있음·종료·잘못된 채널·권한 DB 장애는 실제 STOMP ERROR 및 join() 미호출로 확인했다. 신규 통합 테스트의 Adapter·GuardianRegistrationService는 실제 Bean이며 Firebase 검증·UserService·Repository는 테스트 mock이다. 실 Firebase 계정 및 실제 DB 관계 데이터로 수행한 E2E는 아니다.
+
+초기 신규 테스트는 SUBSCRIBE Principal이 항상 존재한다고 가정하여 1개 실패했다. 서버 세션 속성의 검증된 ID가 정상 유지되고 위조 native ID가 사용되지 않는 실제 동작에 맞춰 테스트를 정정했다. 운영 권한 검증은 완화하지 않았다. 재현 명령은 기존 전체 회귀 명령과 동일하다.
 
 ```json
 {"latitude":37.5,"longitude":127.0,"accuracyMeters":3.0,"capturedAt":"2026-11-15T09:00:00Z"}
