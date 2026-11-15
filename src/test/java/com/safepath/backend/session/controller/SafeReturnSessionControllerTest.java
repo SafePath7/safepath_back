@@ -327,6 +327,127 @@ class SafeReturnSessionControllerTest {
 		return UUID.fromString(objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asText());
 	}
 
+	@Test
+	void selectedGuardiansReceiveOnlyTheMappedChannelId() throws Exception {
+		UUID sessionId = startSession(USER_1_TOKEN);
+		String channelId = context.getBean(SessionChannelStore.class).findBySessionId(sessionId).orElseThrow();
+		for (String token : java.util.List.of("guardian-2", "guardian-3")) {
+			MvcResult result = mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer(token)))
+					.andExpect(status().isOk()).andExpect(jsonPath("$.channelId").value(channelId)).andReturn();
+			assertEquals(1, objectMapper.readTree(result.getResponse().getContentAsString()).size());
+		}
+	}
+
+	@Test
+	void channelLookupRejectsFirebaseAccountWithoutLocalRegistration() throws Exception {
+		UUID sessionId = startSession(USER_1_TOKEN);
+		when(userService.findUserIdByFirebaseUid("guardian-uid-2")).thenReturn(Optional.empty());
+		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isForbidden()).andExpect(jsonPath("$.channelId").doesNotExist());
+	}
+
+	@Test
+	void channelLookupRejectsMissingOrUnacceptedRelationship() throws Exception {
+		UUID sessionId = startSession(USER_1_TOKEN);
+		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
+		when(permissions.hasAcceptedRelationship(42L, 2L)).thenReturn(false);
+		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void statusPermissionCannotAuthorizeChannelLookup() throws Exception {
+		UUID sessionId = startSession(USER_1_TOKEN);
+		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
+		when(permissions.hasPermission(42L, 2L,
+				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(false);
+		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void acceptedButUnselectedGuardianCannotSpoofSelectedGuardianId() throws Exception {
+		UUID sessionId = startSession(USER_1_TOKEN);
+		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
+		when(permissions.hasAcceptedRelationship(42L, 43L)).thenReturn(true);
+		when(permissions.hasPermission(42L, 43L,
+				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(true);
+		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer(USER_2_TOKEN))
+				.param("guardianId", "2").header("X-User-Id", "2"))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void guardianChannelEndpointRejectsOwnerWhileExistingOwnerStatusStillWorks() throws Exception {
+		UUID sessionId = startSession(USER_1_TOKEN);
+		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer(USER_1_TOKEN)))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(get(statusPath(sessionId)).header("Authorization", bearer(USER_1_TOKEN)))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	void unknownAndEndedSessionsCannotRevealChannels() throws Exception {
+		mockMvc.perform(get(channelPath(UUID.randomUUID())).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("SESSION_NOT_FOUND"));
+		UUID sessionId = startSession(USER_1_TOKEN);
+		mockMvc.perform(patch(endPath(sessionId)).header("Authorization", bearer(USER_1_TOKEN)))
+				.andExpect(status().isNoContent());
+		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.channelId").doesNotExist());
+	}
+
+	@Test
+	void channelLookupRejectsMissingMapping() throws Exception {
+		UUID sessionId = startSession(USER_1_TOKEN);
+		context.getBean(SessionChannelStore.class).remove(sessionId);
+		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.channelId").doesNotExist());
+	}
+
+	@Test
+	void channelLookupRejectsMismatchedReverseMapping() throws Exception {
+		UUID sessionId = startSession(USER_1_TOKEN);
+		SessionChannelStore mappings = context.getBean(SessionChannelStore.class);
+		String channelId = mappings.findBySessionId(sessionId).orElseThrow();
+		when(mappings.findSessionIdByChannelId(channelId)).thenReturn(Optional.of(UUID.randomUUID()));
+		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isForbidden()).andExpect(jsonPath("$.channelId").doesNotExist());
+	}
+
+	@Test
+	void channelLookupRequiresValidFirebaseAuthentication() throws Exception {
+		UUID sessionId = startSession(USER_1_TOKEN);
+		mockMvc.perform(get(channelPath(sessionId))).andExpect(status().isUnauthorized());
+		when(tokenService.verifyIdToken("invalid-channel-token"))
+				.thenThrow(new BadCredentialsException("Invalid Firebase ID token"));
+		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("invalid-channel-token")))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void channelPermissionLookupFailureDoesNotReturnChannelId() throws Exception {
+		UUID sessionId = startSession(USER_1_TOKEN);
+		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
+		when(permissions.hasPermission(42L, 2L,
+				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION))
+				.thenThrow(new org.springframework.dao.DataAccessResourceFailureException("Lookup unavailable"));
+		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isInternalServerError()).andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
+				.andExpect(jsonPath("$.channelId").doesNotExist());
+	}
+
+	@Test
+	void channelLookupRejectsMalformedSessionId() throws Exception {
+		mockMvc.perform(get("/api/guardian/monitoring/sessions/not-a-uuid/channel")
+				.header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_SESSION_ID"));
+	}
+
+	private static String channelPath(UUID sessionId) {
+		return "/api/guardian/monitoring/sessions/" + sessionId + "/channel";
+	}
+
 	private static String statusPath(UUID sessionId) {
 		return "/api/safe-return/sessions/" + sessionId + "/status";
 	}
@@ -352,12 +473,16 @@ class SafeReturnSessionControllerTest {
 			SafeReturnSessionExceptionHandler.class,
 			ActiveSessionStore.class,
 			SelectedGuardianStore.class,
-			SessionChannelStore.class,
 			LatestLocationStore.class,
 			SafeReturnSessionService.class,
 			com.safepath.backend.session.service.GuardianSelectionService.class
 	})
 	static class TestWebConfiguration {
+		@Bean
+		SessionChannelStore sessionChannelStore() {
+			return spy(new SessionChannelStore());
+		}
+
 		@Bean
 		com.safepath.backend.session.service.GuardianPermissionService guardianPermissionService() {
 			return mock(com.safepath.backend.session.service.GuardianPermissionService.class);

@@ -1,6 +1,7 @@
 package com.safepath.backend.session.controller;
 
 import com.safepath.backend.session.dto.ActiveSessionResponse;
+import com.safepath.backend.session.dto.MonitoringChannelResponse;
 import com.safepath.backend.session.service.GuardianMonitoringQueryService;
 import com.safepath.backend.websocket.dto.LocationUpdateRequest;
 import org.springframework.http.ResponseEntity;
@@ -33,5 +34,11 @@ public class GuardianMonitoringController {
 			@PathVariable UUID sessionId, Authentication authentication) {
 		return queryService.getMonitoredLocation(sessionId, authentication)
 				.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.noContent().build());
+	}
+
+	@GetMapping("/{sessionId}/channel")
+	public ResponseEntity<MonitoringChannelResponse> getMonitoringChannel(
+			@PathVariable UUID sessionId, Authentication authentication) {
+		return ResponseEntity.ok(new MonitoringChannelResponse(queryService.getGuardianChannelId(sessionId, authentication)));
 	}
 }

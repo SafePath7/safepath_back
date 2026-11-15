@@ -66,6 +66,19 @@ class GuardianMonitoringQueryServiceTest {
 	}
 
 	@Test
+	void guardianChannelLookupUsesAuthenticatedIdentityAndGuardianOnlyService() throws Exception {
+		var request = authenticatedRequest();
+		request.setParameter("guardianId", "999");
+		when(monitoring.getGuardianChannelId(sessionId, 43L)).thenReturn("guardian-channel");
+		filter.doFilter(request, new MockHttpServletResponse(), (incoming, outgoing) -> {
+			assertEquals("guardian-channel", queries.getGuardianChannelId(sessionId,
+					SecurityContextHolder.getContext().getAuthentication()));
+		});
+		verify(monitoring).getGuardianChannelId(sessionId, 43L);
+		verifyNoMoreInteractions(monitoring);
+	}
+
+	@Test
 	void firebasePrincipalDeterminesGuardianIdDespiteForgedRequestIdentity() throws Exception {
 		var request = authenticatedRequest();
 		request.setParameter("guardianId", "999");
