@@ -4,6 +4,9 @@ import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
+import com.safepath.backend.session.store.LatestLocationStore;
+import com.safepath.backend.websocket.dto.LocationUpdateRequest;
+import java.util.Optional;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.util.NoSuchElementException;
@@ -15,18 +18,28 @@ public class GuardianMonitoringService {
 	private final ActiveSessionStore activeSessionStore;
 	private final GuardianPermissionService guardianPermissionService;
 	private final SelectedGuardianStore selectedGuardianStore;
+	private final LatestLocationStore latestLocationStore;
 
 	public GuardianMonitoringService(
 			ActiveSessionStore activeSessionStore,
 			GuardianPermissionService guardianPermissionService,
-			SelectedGuardianStore selectedGuardianStore) {
+			SelectedGuardianStore selectedGuardianStore,
+			LatestLocationStore latestLocationStore) {
 		this.activeSessionStore = Objects.requireNonNull(activeSessionStore);
 		this.guardianPermissionService = Objects.requireNonNull(guardianPermissionService);
 		this.selectedGuardianStore = Objects.requireNonNull(selectedGuardianStore);
+		this.latestLocationStore = Objects.requireNonNull(latestLocationStore);
 	}
 
 	public ActiveSession getMonitoringStatus(UUID sessionId, Long guardianId) {
 		return validateMonitoringPermission(sessionId, guardianId, MonitoringPermissionType.STATUS);
+	}
+
+	public Optional<LocationUpdateRequest> getMonitoredLocation(UUID sessionId, Long guardianId) {
+		synchronized (activeSessionStore) {
+			validateMonitoringPermission(sessionId, guardianId, MonitoringPermissionType.LOCATION);
+			return latestLocationStore.findBySessionId(sessionId);
+		}
 	}
 
 	/** guardianId must be resolved server-side from the authenticated Firebase principal. */

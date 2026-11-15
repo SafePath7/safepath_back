@@ -3,6 +3,9 @@ package com.safepath.backend.session.service;
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
+import com.safepath.backend.session.store.LatestLocationStore;
+import com.safepath.backend.session.store.SessionChannelStore;
+import com.safepath.backend.websocket.InMemoryChannelRegistry;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +37,7 @@ class SafeReturnSessionServiceTest {
 	void setUp() {
 		store = new ActiveSessionStore();
 		selectedGuardianStore = new SelectedGuardianStore(store);
-		service = new SafeReturnSessionService(store, selectedGuardianStore);
+		service = new SafeReturnSessionService(store, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new LatestLocationStore(store));
 	}
 
 	@Test

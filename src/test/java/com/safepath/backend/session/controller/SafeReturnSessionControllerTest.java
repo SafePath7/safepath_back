@@ -7,6 +7,9 @@ import com.safepath.backend.session.exception.SafeReturnSessionExceptionHandler;
 import com.safepath.backend.session.service.SafeReturnSessionService;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
+import com.safepath.backend.session.store.LatestLocationStore;
+import com.safepath.backend.session.store.SessionChannelStore;
+import com.safepath.backend.websocket.InMemoryChannelRegistry;
 import com.safepath.backend.user.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -46,6 +51,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class SafeReturnSessionControllerTest {
+	@Test
+	void channelCreationFailureReturnsExistingInternalErrorInsteadOfConflict() throws Exception {
+		doThrow(new IllegalStateException("Channel unavailable"))
+				.when(context.getBean(InMemoryChannelRegistry.class)).open(42L, java.util.Set.of());
+		mockMvc.perform(post("/api/safe-return/sessions")
+				.header("Authorization", bearer(USER_1_TOKEN)))
+				.andExpect(status().isInternalServerError())
+				.andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
+		assertTrue(context.getBean(ActiveSessionStore.class).findByUserId(42L).isEmpty());
+	}
 
 	private static final String USER_1_UID = "firebase-uid-1";
 	private static final String USER_2_UID = "firebase-uid-2";
@@ -237,9 +252,15 @@ class SafeReturnSessionControllerTest {
 			SafeReturnSessionExceptionHandler.class,
 			ActiveSessionStore.class,
 			SelectedGuardianStore.class,
+			SessionChannelStore.class,
+			LatestLocationStore.class,
 			SafeReturnSessionService.class
 	})
 	static class TestWebConfiguration {
+		@Bean
+		InMemoryChannelRegistry channelRegistry() {
+			return spy(new InMemoryChannelRegistry());
+		}
 
 		@Bean
 		FirebaseTokenService firebaseTokenService() {
