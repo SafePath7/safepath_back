@@ -32,6 +32,10 @@ public class GuardianMonitoringQueryService {
 		return monitoringService.getChannelId(sessionId, authenticatedGuardianId(authentication));
 	}
 
+	public String getGuardianChannelId(UUID sessionId, Authentication authentication) {
+		return monitoringService.getGuardianChannelId(sessionId, authenticatedGuardianId(authentication));
+	}
+
 	public Optional<LocationUpdateRequest> getMonitoredLocation(UUID sessionId, Authentication authentication) {
 		return monitoringService.getMonitoredLocation(sessionId, authenticatedGuardianId(authentication));
 	}
