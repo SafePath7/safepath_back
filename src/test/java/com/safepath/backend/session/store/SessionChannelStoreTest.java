@@ -52,6 +52,34 @@ class SessionChannelStoreTest {
 	}
 
 	@Test
+	void reverseLookupTracksBothRemovalMethodsAndKeepsOtherSession() {
+		UUID other = UUID.randomUUID();
+		assertTrue(store.findSessionIdByChannelId("channel-1").isEmpty());
+		store.save(sessionId, "channel-1");
+		store.save(other, "channel-2");
+		assertEquals(sessionId, store.findSessionIdByChannelId("channel-1").orElseThrow());
+		assertFalse(store.removeIfMapped(sessionId, "channel-2"));
+		assertEquals(sessionId, store.findSessionIdByChannelId("channel-1").orElseThrow());
+		assertTrue(store.removeIfMapped(sessionId, "channel-1"));
+		assertTrue(store.findSessionIdByChannelId("channel-1").isEmpty());
+		assertEquals(other, store.findSessionIdByChannelId("channel-2").orElseThrow());
+		store.remove(other);
+		assertTrue(store.findSessionIdByChannelId("channel-2").isEmpty());
+	}
+
+	@Test
+	void reverseLookupRejectsInvalidAndAmbiguousChannels() {
+		assertThrows(IllegalArgumentException.class, () -> store.findSessionIdByChannelId(null));
+		assertThrows(IllegalArgumentException.class, () -> store.findSessionIdByChannelId(" "));
+		store.save(sessionId, "shared-channel");
+		UUID other = UUID.randomUUID();
+		store.save(other, "shared-channel");
+		assertThrows(IllegalStateException.class, () -> store.findSessionIdByChannelId("shared-channel"));
+		store.remove(other);
+		assertEquals(sessionId, store.findSessionIdByChannelId("shared-channel").orElseThrow());
+	}
+
+	@Test
 	void concurrentMappingsAllowOnlyOneWinner() throws Exception {
 		CountDownLatch startGate = new CountDownLatch(1);
 		try (var executor = Executors.newFixedThreadPool(8)) {

@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentMap;
 public class SessionChannelStore {
 	private final ConcurrentMap<UUID, String> channelIdsBySessionId = new ConcurrentHashMap<>();
 
-	public void save(UUID sessionId, String channelId) {
+	public synchronized void save(UUID sessionId, String channelId) {
 		Objects.requireNonNull(sessionId, "sessionId must not be null");
 		if (channelId == null || channelId.isBlank()) {
 			throw new IllegalArgumentException("channelId must not be blank");
@@ -22,15 +22,32 @@ public class SessionChannelStore {
 		}
 	}
 
-	public Optional<String> findBySessionId(UUID sessionId) {
+	public synchronized Optional<String> findBySessionId(UUID sessionId) {
 		return Optional.ofNullable(channelIdsBySessionId.get(Objects.requireNonNull(sessionId)));
 	}
 
-	public Optional<String> remove(UUID sessionId) {
+	/** Mapping lookup only; callers must separately verify that the session is active and authorized. */
+	public synchronized Optional<UUID> findSessionIdByChannelId(String channelId) {
+		if (channelId == null || channelId.isBlank()) {
+			throw new IllegalArgumentException("channelId must not be blank");
+		}
+		UUID matchedSessionId = null;
+		for (var mapping : channelIdsBySessionId.entrySet()) {
+			if (channelId.equals(mapping.getValue())) {
+				if (matchedSessionId != null) {
+					throw new IllegalStateException("Channel is mapped to multiple sessions");
+				}
+				matchedSessionId = mapping.getKey();
+			}
+		}
+		return Optional.ofNullable(matchedSessionId);
+	}
+
+	public synchronized Optional<String> remove(UUID sessionId) {
 		return Optional.ofNullable(channelIdsBySessionId.remove(Objects.requireNonNull(sessionId)));
 	}
 
-	public boolean removeIfMapped(UUID sessionId, String channelId) {
+	public synchronized boolean removeIfMapped(UUID sessionId, String channelId) {
 		return channelIdsBySessionId.remove(Objects.requireNonNull(sessionId), Objects.requireNonNull(channelId));
 	}
 }
