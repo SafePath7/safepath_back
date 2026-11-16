@@ -1,0 +1,48 @@
+{
+  "description": "SafePath repository-local Codex policy hooks.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/Invoke-SafePathHook.ps1') -Event SessionStart\"",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/Invoke-SafePathHook.ps1') -Event SessionStart\"",
+            "statusMessage": "Loading SafePath common rules",
+            "additionalContextLimit": 6000,
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/Invoke-SafePathHook.ps1') -Event UserPromptSubmit\"",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/Invoke-SafePathHook.ps1') -Event UserPromptSubmit\"",
+            "statusMessage": "Selecting SafePath task rules",
+            "additionalContextLimit": 12000,
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch|Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/Invoke-SafePathHook.ps1') -Event PreToolUse\"",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"& (Join-Path (git rev-parse --show-toplevel) '.codex/hooks/Invoke-SafePathHook.ps1') -Event PreToolUse\"",
+            "statusMessage": "Checking SafePath change scope",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
