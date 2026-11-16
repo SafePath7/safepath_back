@@ -36,6 +36,7 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, exception) -> response.setStatus(403)))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(login).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/safety-facilities").permitAll()
                         .requestMatchers("/ws", "/ws/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(firebaseAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
