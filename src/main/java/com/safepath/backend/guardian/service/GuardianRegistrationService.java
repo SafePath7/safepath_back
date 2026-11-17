@@ -3,6 +3,7 @@ package com.safepath.backend.guardian.service;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -32,6 +33,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class GuardianRegistrationService {
     private static final Logger log = LoggerFactory.getLogger(GuardianRegistrationService.class);
     private static final String DUPLICATE = "같은 사용자와 보호자의 등록이 이미 있습니다.";
+    private static final String SUSPENDED_BY_ADMIN ="관리자에 의해 중지된 등록은 다시 요청할 수 없습니다.";
     private final GuardianRegistrationRepository repository;
     private final GuardianRequestNotifier notifier;
 
@@ -45,10 +47,9 @@ public class GuardianRegistrationService {
         if (actor.id() == guardianId) throw ApiException.badRequest("자기 자신을 보호자로 등록할 수 없습니다.");
         if (!repository.memberExists(actor.id())) throw ApiException.notFound("이용자 회원");
         if (!repository.memberExists(guardianId)) throw ApiException.notFound("보호자 회원");
-        // Every existing state remains a conflict, including rejected/revoked relations.
-        if (repository.findByUserIdAndGuardianId(actor.id(), guardianId).isPresent()) {
-            throw ApiException.conflict(DUPLICATE);
-        }
+        Optional<GuardianRegistration> existing =
+                repository.findForUpdateByUserIdAndGuardianId(actor.id(), guardianId);
+        if (existing.isPresent()) return reRequest(existing.get());
         // Zero rows means another request inserted the same pair after the lookup.
         if (repository.insertIfAbsent(actor.id(), guardianId, UtcTime.now()) == 0) {
             throw ApiException.conflict(DUPLICATE);
@@ -57,6 +58,27 @@ public class GuardianRegistrationService {
                 .orElseThrow(() -> ApiException.conflict(DUPLICATE));
         notifyGuardianAfterCommit(actor.id(), guardianId);
         return RegistrationResponse.from(registration);
+    }
+
+    /**
+     * Re-request policy for an existing pair (the row is locked by the caller):
+     * PENDING/ACCEPTED - duplicate, conflict.
+     * SUSPENDED - an admin decision; the user cannot lift it by asking again, conflict.
+     * REJECTED/REVOKED - ended relations; the row is reset to a fresh PENDING request with
+     * every view permission off, and the guardian is notified again.
+     */
+    private RegistrationResponse reRequest(GuardianRegistration registration) {
+        switch (registration.getStatus()) {
+            case PENDING, ACCEPTED -> throw ApiException.conflict(DUPLICATE);
+            case SUSPENDED -> throw ApiException.conflict(SUSPENDED_BY_ADMIN);
+            case REJECTED, REVOKED -> {
+                registration.reopenAsPending();
+                GuardianRegistration saved = repository.saveAndFlush(registration);
+                notifyGuardianAfterCommit(saved.getUserId(), saved.getGuardianId());
+                return RegistrationResponse.from(saved);
+            }
+        }
+        throw new IllegalStateException("Unknown registration status: " + registration.getStatus());
     }
 
     /** The notification module expects this push right after the request is saved. */
