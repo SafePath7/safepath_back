@@ -36,7 +36,8 @@ public class GuardianRegistration {
     @Column(nullable = false, length = 20)
     private RegistrationStatus status;
 
-    @Column(name = "requested_at", nullable = false, updatable = false)
+    // Updatable: a re-request after REJECTED/REVOKED restarts the request time.
+    @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;
     @Column(name = "accepted_at")
     private LocalDateTime acceptedAt;
@@ -59,7 +60,30 @@ public class GuardianRegistration {
     public void changeStatus(RegistrationStatus status) {
         this.status = status;
         this.updatedAt = UtcTime.now();
-        if (status == RegistrationStatus.ACCEPTED) this.acceptedAt = this.updatedAt;
+        if (status == RegistrationStatus.ACCEPTED) {
+            this.acceptedAt = this.updatedAt;
+            // On acceptance the guardian starts with every view permission on;
+            // the user can still turn any of them off through the permissions API.
+            this.canViewLocation = true;
+            this.canViewStatus = true;
+            this.canViewPersonalInfo = true;
+        }
+    }
+
+    /**
+     * Turns an ended (REJECTED/REVOKED) registration back into a fresh PENDING request.
+     * The earlier acceptance and its view permissions are cleared, so nothing is visible
+     * to the guardian until they accept again and the user grants permissions again.
+     */
+    public void reopenAsPending() {
+        LocalDateTime now = UtcTime.now();
+        this.status = RegistrationStatus.PENDING;
+        this.requestedAt = now;
+        this.acceptedAt = null;
+        this.canViewLocation = false;
+        this.canViewStatus = false;
+        this.canViewPersonalInfo = false;
+        this.updatedAt = now;
     }
 
     public void changePermissions(boolean location, boolean status, boolean personalInfo) {

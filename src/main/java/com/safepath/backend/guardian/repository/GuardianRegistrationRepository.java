@@ -18,6 +18,12 @@ import org.springframework.data.repository.query.Param;
 public interface GuardianRegistrationRepository extends JpaRepository<GuardianRegistration, Long> {
     Optional<GuardianRegistration> findByUserIdAndGuardianId(Long userId, Long guardianId);
 
+    /** Locks the pair's row so two concurrent re-requests cannot both reopen it. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM GuardianRegistration r WHERE r.userId = :userId AND r.guardianId = :guardianId")
+    Optional<GuardianRegistration> findForUpdateByUserIdAndGuardianId(@Param("userId") Long userId,
+            @Param("guardianId") Long guardianId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM GuardianRegistration r WHERE r.id = :id")
     Optional<GuardianRegistration> findForUpdateById(@Param("id") Long id);

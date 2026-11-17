@@ -2,6 +2,7 @@ package com.safepath.backend.guardian;
 
 import java.util.Optional;
 
+import com.safepath.backend.common.auth.CurrentUser.Actor;
 import com.safepath.backend.guardian.dto.GuardianAccess;
 import com.safepath.backend.guardian.entity.GuardianRegistration;
 import com.safepath.backend.guardian.entity.PermissionType;
@@ -53,8 +54,39 @@ class GuardianAccessTests {
         assertThat(service.hasGuardianPermission(GUARDIAN, USER, PermissionType.LOCATION)).isFalse();
     }
 
-    private void registration(RegistrationStatus status, boolean location, boolean viewStatus) {
+    @Test
+    void acceptingTurnsOnEveryViewPermission() {
+        GuardianRegistration pending = registration(RegistrationStatus.PENDING, false, false);
+        when(repository.findForUpdateById(1L)).thenReturn(Optional.of(pending));
+        when(repository.saveAndFlush(pending)).thenReturn(pending);
+
+        service.acceptRegistration(new Actor(GUARDIAN, false), 1);
+
+        assertThat(pending.getStatus()).isEqualTo(RegistrationStatus.ACCEPTED);
+        assertThat(pending.getAcceptedAt()).isNotNull();
+        assertThat(pending.isCanViewLocation()).isTrue();
+        assertThat(pending.isCanViewStatus()).isTrue();
+        assertThat(pending.isCanViewPersonalInfo()).isTrue();
+        assertThat(service.getGuardianAccess(USER, GUARDIAN)).isEqualTo(new GuardianAccess(true, true, true));
+    }
+
+    @Test
+    void rejectingTurnsOnNothing() {
+        GuardianRegistration pending = registration(RegistrationStatus.PENDING, false, false);
+        when(repository.findForUpdateById(1L)).thenReturn(Optional.of(pending));
+        when(repository.saveAndFlush(pending)).thenReturn(pending);
+
+        service.rejectRegistration(new Actor(GUARDIAN, false), 1);
+
+        assertThat(pending.isCanViewLocation()).isFalse();
+        assertThat(pending.isCanViewStatus()).isFalse();
+        assertThat(pending.isCanViewPersonalInfo()).isFalse();
+        assertThat(service.getGuardianAccess(USER, GUARDIAN)).isEqualTo(GuardianAccess.NONE);
+    }
+
+    private GuardianRegistration registration(RegistrationStatus status, boolean location, boolean viewStatus) {
         GuardianRegistration registration = GuardianRegistrations.of(1, USER, GUARDIAN, status, location, viewStatus);
         when(repository.findByUserIdAndGuardianId(USER, GUARDIAN)).thenReturn(Optional.of(registration));
+        return registration;
     }
 }
