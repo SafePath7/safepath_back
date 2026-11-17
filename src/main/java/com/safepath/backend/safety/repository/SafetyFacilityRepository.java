@@ -1,5 +1,6 @@
 package com.safepath.backend.safety.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,6 +11,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface SafetyFacilityRepository extends JpaRepository<SafetyFacility, Long> {
     Optional<SafetyFacility> findBySourceAndExternalId(String source, String externalId);
+
+    List<SafetyFacility> findBySourceAndExternalIdIn(String source, Collection<String> externalIds);
 
     List<SafetyFacility> findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(
             double southWestLat, double northEastLat, double southWestLng, double northEastLng);

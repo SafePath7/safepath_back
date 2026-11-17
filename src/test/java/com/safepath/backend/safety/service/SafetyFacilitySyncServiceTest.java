@@ -7,8 +7,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.util.Optional;
 import java.util.List;
+import java.util.Optional;
 
 import com.safepath.backend.safety.dto.SafetyFacilityImportItem;
 import com.safepath.backend.safety.entity.SafetyFacility;
@@ -50,19 +50,20 @@ class SafetyFacilitySyncServiceTest {
     @Test
     void returnsCreatedAndUpdatedCountsForBatch() {
         SafetyFacility existing = SafetyFacility.create(
-                "SECURITY_LIGHT", "LIGHT-100", 37.0, 126.0, "Old address", "SECURITY_LIGHT");
-        SafetyFacilityImportItem newItem = item();
+                "CCTV", "CCTV-100", 37.0, 126.0, "Old address", "CCTV");
         SafetyFacilityImportItem existingItem = new SafetyFacilityImportItem(
-                "SECURITY_LIGHT", "LIGHT-100", 37.5670, 126.9790, "New address", "SECURITY_LIGHT");
-        when(facilities.findBySourceAndExternalId("CCTV", "CCTV-100")).thenReturn(Optional.empty());
-        when(facilities.findBySourceAndExternalId("SECURITY_LIGHT", "LIGHT-100"))
-                .thenReturn(Optional.of(existing));
+                "CCTV", "CCTV-100", 37.5670, 126.9790, "New address", "CCTV");
+        SafetyFacilityImportItem newItem = new SafetyFacilityImportItem(
+                "CCTV", "CCTV-101", 37.5665, 126.9780, "Seoul", "CCTV");
+        when(facilities.findBySourceAndExternalIdIn("CCTV", List.of("CCTV-101", "CCTV-100")))
+                .thenReturn(List.of(existing));
 
         SafetyFacilitySyncService.SyncResult result = service.syncAll(List.of(newItem, existingItem));
 
         assertEquals(1, result.createdCount());
         assertEquals(1, result.updatedCount());
         assertEquals("New address", existing.getAddress());
+        verify(facilities).saveAll(any());
     }
 
     private SafetyFacilityImportItem item() {
