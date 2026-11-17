@@ -1,16 +1,113 @@
 package com.safepath.backend.safety.safetyguardianstore;
-import java.net.URI; import java.util.List;
-import com.fasterxml.jackson.annotation.JsonProperty;
+
+import java.util.List;
+
 import com.safepath.backend.safety.dto.SafetyFacilityImportItem;
 import com.safepath.backend.safety.service.SafetyFacilitySyncService;
-import org.springframework.beans.factory.annotation.Value; import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient; import org.springframework.web.util.UriComponentsBuilder;
-@Service public class SafetyGuardianStoreSyncService {
- private static final String ENDPOINT="https://api.data.go.kr/openapi/tn_pubr_public_female_safety_prtchouse_api", SOURCE="SAFETY_GUARDIAN_STORE"; private final RestClient client=RestClient.create(); private final String key; private final SafetyFacilitySyncService facilities;
- public SafetyGuardianStoreSyncService(@Value("${SAFEPATH_SAFETY_GUARDIAN_STORE_API_KEY:}") String key,SafetyFacilitySyncService facilities){this.key=key;this.facilities=facilities;}
- public SyncResult syncAll(int maxPages){int created=0,updated=0,total=0; for(int page=1;;page++){Response r=fetch(page); if(r.header()==null||!"00".equals(r.header().resultCode())||r.body()==null||r.body().items()==null||r.body().items().item()==null)throw new IllegalStateException("Safety guardian store API response is invalid"); List<SafetyFacilityImportItem> items=r.body().items().item().stream().filter(i->valid(i.latitude(),-90,90)&&valid(i.longitude(),-180,180)).map(i->new SafetyFacilityImportItem(SOURCE,id(i),Double.parseDouble(i.latitude()),Double.parseDouble(i.longitude()),first(i.rdnmadr(),i.lnmadr()),SOURCE)).toList(); var result=facilities.syncAll(items);created+=result.createdCount();updated+=result.updatedCount();total=r.body().totalCount();if((maxPages>0&&page>=maxPages)||page*100>=total)return new SyncResult(page,total,created,updated);}}
- private Response fetch(int page){if(key.isBlank())throw new IllegalStateException("Safety guardian store API key is not configured");URI uri=UriComponentsBuilder.fromUriString(ENDPOINT).queryParam("serviceKey",key).queryParam("pageNo",page).queryParam("numOfRows",100).queryParam("type","json").build().encode().toUri();Response r=client.get().uri(uri).retrieve().body(Response.class);if(r==null)throw new IllegalStateException("Safety guardian store API returned an empty response");return r;}
- private boolean valid(String v,double min,double max){try{double n=Double.parseDouble(v);return Double.isFinite(n)&&n>=min&&n<=max;}catch(Exception e){return false;}}
- private String id(Item i){return String.join("|",i.storNm()==null?"":i.storNm(),i.phoneNumber()==null?"":i.phoneNumber(),first(i.rdnmadr(),i.lnmadr()));} private String first(String a,String b){return a!=null&&!a.isBlank()?a:b==null?"":b;}
- public record SyncResult(int pageCount,int totalCount,int createdCount,int updatedCount){} record Response(Header header,Body body){ } record Header(String resultCode,String resultMsg){} record Body(Items items,int totalCount){} record Items(List<Item> item){} record Item(String storNm,String rdnmadr,String lnmadr,String latitude,String longitude,@JsonProperty("phoneNumber")String phoneNumber){}
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+@Service
+public class SafetyGuardianStoreSyncService {
+    private static final Logger log = LoggerFactory.getLogger(SafetyGuardianStoreSyncService.class);
+    private static final String SOURCE = "SAFETY_GUARDIAN_STORE";
+    private static final int PAGE_SIZE = 100;
+
+    private final SafetyGuardianStoreApiClient apiClient;
+    private final SafetyFacilitySyncService facilitySyncService;
+
+    public SafetyGuardianStoreSyncService(
+            SafetyGuardianStoreApiClient apiClient,
+            SafetyFacilitySyncService facilitySyncService) {
+        this.apiClient = apiClient;
+        this.facilitySyncService = facilitySyncService;
+    }
+
+    public SyncResult syncAll(int maxPages) {
+        if (maxPages < 0) {
+            throw new IllegalArgumentException("maxPages must not be negative");
+        }
+
+        int createdCount = 0;
+        int updatedCount = 0;
+        int totalCount = 0;
+
+        for (int pageNo = 1; ; pageNo++) {
+            SafetyGuardianStoreApiResponse response = apiClient.fetch(pageNo, PAGE_SIZE);
+            validateResponse(response);
+
+            List<SafetyGuardianStoreApiResponse.Item> apiItems = response.body().items().item();
+            List<SafetyFacilityImportItem> items = apiItems.stream()
+                    .filter(this::hasValidCoordinates)
+                    .map(this::toImportItem)
+                    .toList();
+            logSkippedItems(apiItems.size(), items.size(), pageNo);
+
+            SafetyFacilitySyncService.SyncResult pageResult = facilitySyncService.syncAll(items);
+            createdCount += pageResult.createdCount();
+            updatedCount += pageResult.updatedCount();
+            totalCount = response.body().totalCount();
+
+            if (maxPages > 0 && pageNo >= maxPages || pageNo * PAGE_SIZE >= totalCount) {
+                return new SyncResult(pageNo, totalCount, createdCount, updatedCount);
+            }
+        }
+    }
+
+    private void validateResponse(SafetyGuardianStoreApiResponse response) {
+        if (response.header() == null || !"00".equals(response.header().resultCode())
+                || response.body() == null || response.body().items() == null
+                || response.body().items().item() == null) {
+            throw new IllegalStateException("Safety guardian store API response is invalid");
+        }
+    }
+
+    private SafetyFacilityImportItem toImportItem(SafetyGuardianStoreApiResponse.Item item) {
+        return new SafetyFacilityImportItem(
+                SOURCE,
+                externalId(item),
+                Double.parseDouble(item.latitude()),
+                Double.parseDouble(item.longitude()),
+                firstNonBlank(item.roadAddress(), item.lotAddress()),
+                SOURCE);
+    }
+
+    private boolean hasValidCoordinates(SafetyGuardianStoreApiResponse.Item item) {
+        return isValidCoordinate(item.latitude(), -90, 90)
+                && isValidCoordinate(item.longitude(), -180, 180);
+    }
+
+    private boolean isValidCoordinate(String value, double min, double max) {
+        try {
+            double coordinate = Double.parseDouble(value);
+            return Double.isFinite(coordinate) && coordinate >= min && coordinate <= max;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private String externalId(SafetyGuardianStoreApiResponse.Item item) {
+        return String.join("|", nullToEmpty(item.storeName()), nullToEmpty(item.phoneNumber()),
+                firstNonBlank(item.roadAddress(), item.lotAddress()));
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        return primary != null && !primary.isBlank() ? primary : nullToEmpty(fallback);
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private void logSkippedItems(int apiItemCount, int importItemCount, int pageNo) {
+        int skippedCount = apiItemCount - importItemCount;
+        if (skippedCount > 0) {
+            log.warn("Safety guardian store sync skipped {} items with invalid coordinates on page {}", skippedCount, pageNo);
+        }
+    }
+
+    public record SyncResult(int pageCount, int totalCount, int createdCount, int updatedCount) {
+    }
 }
