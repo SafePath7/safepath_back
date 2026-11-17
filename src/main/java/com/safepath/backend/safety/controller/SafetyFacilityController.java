@@ -28,7 +28,7 @@ public class SafetyFacilityController {
 
     @GetMapping
     public List<SafetyFacilityResponse> findInBounds(
-            @RequestParam @Min(0) @Max(22) int zoom,
+            @RequestParam @Min(1) @Max(14) int zoom,
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double southWestLat,
             @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double southWestLng,
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double northEastLat,

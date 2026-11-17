@@ -24,14 +24,14 @@ class SafetyFacilityServiceTest {
     private final SafetyFacilityService service = new SafetyFacilityService(facilities);
 
     @Test
-    void limitsResultsAtLowAndMidZoom() {
+    void limitsResultsAtDistantAndMidKakaoMapLevels() {
         SafetyFacility facility = facility(1L);
         when(facilities.findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(
                 eq(37.0), eq(38.0), eq(126.0), eq(127.0), any(Pageable.class)))
                 .thenReturn(List.of(facility));
 
-        service.findInBounds(11, 37.0, 126.0, 38.0, 127.0);
-        service.findInBounds(12, 37.0, 126.0, 38.0, 127.0);
+        service.findInBounds(7, 37.0, 126.0, 38.0, 127.0);
+        service.findInBounds(4, 37.0, 126.0, 38.0, 127.0);
         ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
         verify(facilities, times(2)).findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(
                 eq(37.0), eq(38.0), eq(126.0), eq(127.0), page.capture());
@@ -40,20 +40,20 @@ class SafetyFacilityServiceTest {
     }
 
     @Test
-    void returnsAllFacilitiesAtHighZoom() {
+    void returnsAllFacilitiesAtCloseKakaoMapLevel() {
         SafetyFacility first = facility(1L);
         SafetyFacility second = facility(2L);
         when(facilities.findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(37.0, 38.0, 126.0, 127.0))
                 .thenReturn(List.of(first, second));
 
-        assertEquals(2, service.findInBounds(15, 37.0, 126.0, 38.0, 127.0).size());
+        assertEquals(2, service.findInBounds(3, 37.0, 126.0, 38.0, 127.0).size());
         verify(facilities).findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(37.0, 38.0, 126.0, 127.0);
     }
 
     @Test
     void rejectsReversedBounds() {
         ResponseStatusException error = assertThrows(ResponseStatusException.class,
-                () -> service.findInBounds(15, 38.0, 126.0, 37.0, 127.0));
+                () -> service.findInBounds(3, 38.0, 126.0, 37.0, 127.0));
         assertEquals(400, error.getStatusCode().value());
     }
 

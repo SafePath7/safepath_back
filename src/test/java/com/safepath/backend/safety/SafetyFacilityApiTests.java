@@ -19,7 +19,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "safepath.security-light.sync.enabled=false",
+        "safepath.cctv.sync.enabled=false"
+})
 @AutoConfigureMockMvc
 @ActiveProfiles("local")
 @Transactional
@@ -41,8 +44,8 @@ class SafetyFacilityApiTests {
     }
 
     @Test
-    void returnsEveryFacilityInBoundsAtHighZoom() throws Exception {
-        mvc.perform(request(15)).andExpect(status().isOk())
+    void returnsEveryFacilityInBoundsAtCloseKakaoMapLevel() throws Exception {
+        mvc.perform(request(3)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(3))
                 .andExpect(jsonPath("$[0].facilityType").value("POLICE"))
                 .andExpect(jsonPath("$[2].address").value("Seoul"));
@@ -51,7 +54,7 @@ class SafetyFacilityApiTests {
 
     @Test
     void rejectsInvalidBoundsWithoutAuthentication() throws Exception {
-        mvc.perform(get(URL).param("zoom", "15").param("southWestLat", "38").param("southWestLng", "126")
+        mvc.perform(get(URL).param("zoom", "3").param("southWestLat", "38").param("southWestLng", "126")
                 .param("northEastLat", "37").param("northEastLng", "127"))
                 .andExpect(status().isBadRequest());
     }
