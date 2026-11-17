@@ -35,13 +35,33 @@ class SecurityLightSyncServiceTest {
         verify(facilitySyncService, times(2)).syncAll(any());
     }
 
+    @Test
+    void skipsItemsWithMissingCoordinates() {
+        SecurityLightApiResponse.Item validItem = item("37.5665", "126.9780");
+        SecurityLightApiResponse.Item missingLatitudeItem = item("", "126.9780");
+        when(apiClient.fetch(1, 1_000)).thenReturn(response(1, 2, List.of(validItem, missingLatitudeItem)));
+        when(facilitySyncService.syncAll(any())).thenReturn(new SafetyFacilitySyncService.SyncResult(1, 0));
+
+        SecurityLightSyncService.SyncResult result = service.syncAll();
+
+        assertEquals(1, result.createdCount());
+        verify(facilitySyncService).syncAll(any());
+    }
+
     private SecurityLightApiResponse response(int pageNo, int totalCount) {
-        SecurityLightApiResponse.Item item = new SecurityLightApiResponse.Item(
-                "Test light", "1", "", "Test address", "37.5665", "126.9780", "2026", "Pole",
-                "", "Institution", "2026-01-01", "1100000", "Test institution");
+        return response(pageNo, totalCount, List.of(item("37.5665", "126.9780")));
+    }
+
+    private SecurityLightApiResponse response(int pageNo, int totalCount, List<SecurityLightApiResponse.Item> items) {
         return new SecurityLightApiResponse(
                 new SecurityLightApiResponse.Header("00", "NORMAL SERVICE."),
                 new SecurityLightApiResponse.Body(
-                        new SecurityLightApiResponse.Items(List.of(item)), 1_000, pageNo, totalCount));
+                        new SecurityLightApiResponse.Items(items), 1_000, pageNo, totalCount));
+    }
+
+    private SecurityLightApiResponse.Item item(String latitude, String longitude) {
+        return new SecurityLightApiResponse.Item(
+                "Test light", "1", "", "Test address", latitude, longitude, "2026", "Pole",
+                "", "Institution", "2026-01-01", "1100000", "Test institution");
     }
 }

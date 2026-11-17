@@ -1,8 +1,11 @@
 package com.safepath.backend.safety.securitylight;
 
+import java.net.URI;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
 public class SecurityLightApiClient {
@@ -21,13 +24,17 @@ public class SecurityLightApiClient {
             throw new IllegalStateException("Security light API key is not configured");
         }
 
+        URI requestUri = UriComponentsBuilder.fromUriString(ENDPOINT)
+                .queryParam("serviceKey", serviceKey)
+                .queryParam("pageNo", pageNo)
+                .queryParam("numOfRows", numOfRows)
+                .queryParam("type", "json")
+                .build()
+                .encode()
+                .toUri();
+
         SecurityLightApiResponse response = restClient.get()
-                .uri(uriBuilder -> uriBuilder.path(ENDPOINT)
-                        .queryParam("serviceKey", serviceKey)
-                        .queryParam("pageNo", pageNo)
-                        .queryParam("numOfRows", numOfRows)
-                        .queryParam("type", "json")
-                        .build())
+                .uri(requestUri)
                 .retrieve()
                 .body(SecurityLightApiResponse.class);
         if (response == null) {

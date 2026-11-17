@@ -9,10 +9,13 @@ import java.util.List;
 import com.safepath.backend.safety.dto.SafetyFacilityImportItem;
 import com.safepath.backend.safety.service.SafetyFacilitySyncService;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class SecurityLightSyncService {
+    private static final Logger log = LoggerFactory.getLogger(SecurityLightSyncService.class);
     private static final String SOURCE = "SECURITY_LIGHT";
     private static final int PAGE_SIZE = 1_000;
 
@@ -33,9 +36,15 @@ public class SecurityLightSyncService {
             SecurityLightApiResponse response = apiClient.fetch(pageNo, PAGE_SIZE);
             validateResponse(response);
 
-            List<SafetyFacilityImportItem> items = response.body().items().item().stream()
+            List<SecurityLightApiResponse.Item> apiItems = response.body().items().item();
+            List<SafetyFacilityImportItem> items = apiItems.stream()
+                    .filter(this::hasValidCoordinates)
                     .map(this::toImportItem)
                     .toList();
+            int skippedCount = apiItems.size() - items.size();
+            if (skippedCount > 0) {
+                log.warn("Security light sync skipped {} items with invalid coordinates on page {}", skippedCount, pageNo);
+            }
             SafetyFacilitySyncService.SyncResult pageResult = facilitySyncService.syncAll(items);
             createdCount += pageResult.createdCount();
             updatedCount += pageResult.updatedCount();
@@ -63,6 +72,24 @@ public class SecurityLightSyncService {
                 Double.parseDouble(item.longitude()),
                 address,
                 SOURCE);
+    }
+
+    private boolean hasValidCoordinates(SecurityLightApiResponse.Item item) {
+        return isValidCoordinate(item.latitude(), -90, 90)
+                && isValidCoordinate(item.longitude(), -180, 180);
+    }
+
+    private boolean isValidCoordinate(String value, double min, double max) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+
+        try {
+            double coordinate = Double.parseDouble(value);
+            return Double.isFinite(coordinate) && coordinate >= min && coordinate <= max;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private String externalId(SecurityLightApiResponse.Item item) {
