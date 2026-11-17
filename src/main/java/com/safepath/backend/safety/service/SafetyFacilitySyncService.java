@@ -21,6 +21,11 @@ public class SafetyFacilitySyncService {
         this.facilities = facilities;
     }
 
+    @Transactional(readOnly = true)
+    public boolean hasFacilities(String source) {
+        return facilities.existsBySource(source);
+    }
+
     @Transactional
     public void sync(SafetyFacilityImportItem item) {
         syncItem(item);

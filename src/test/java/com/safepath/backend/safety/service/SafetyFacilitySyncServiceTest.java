@@ -1,6 +1,7 @@
 package com.safepath.backend.safety.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -20,6 +21,15 @@ import org.mockito.ArgumentCaptor;
 class SafetyFacilitySyncServiceTest {
     private final SafetyFacilityRepository facilities = mock(SafetyFacilityRepository.class);
     private final SafetyFacilitySyncService service = new SafetyFacilitySyncService(facilities);
+
+    @Test
+    void reportsWhetherFacilitiesExistForSource() {
+        when(facilities.existsBySource("CCTV")).thenReturn(true);
+
+        assertTrue(service.hasFacilities("CCTV"));
+
+        verify(facilities).existsBySource("CCTV");
+    }
 
     @Test
     void createsFacilityWhenSourceAndExternalIdDoNotExist() {

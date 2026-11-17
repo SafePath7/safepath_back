@@ -10,6 +10,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface SafetyFacilityRepository extends JpaRepository<SafetyFacility, Long> {
+    boolean existsBySource(String source);
+
     Optional<SafetyFacility> findBySourceAndExternalId(String source, String externalId);
 
     List<SafetyFacility> findBySourceAndExternalIdIn(String source, Collection<String> externalIds);
