@@ -1,4 +1,4 @@
-package com.safepath.backend.safety.service;
+package com.safepath.backend.safety.securitylight;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -9,8 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 
-import com.safepath.backend.safety.client.SecurityLightApiClient;
-import com.safepath.backend.safety.dto.SecurityLightApiResponse;
+import com.safepath.backend.safety.service.SafetyFacilitySyncService;
 
 import org.junit.jupiter.api.Test;
 

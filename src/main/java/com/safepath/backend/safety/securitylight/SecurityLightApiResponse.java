@@ -1,4 +1,4 @@
-package com.safepath.backend.safety.dto;
+package com.safepath.backend.safety.securitylight;
 
 import java.util.List;
 

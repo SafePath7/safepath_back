@@ -1,6 +1,4 @@
-package com.safepath.backend.safety.client;
-
-import com.safepath.backend.safety.dto.SecurityLightApiResponse;
+package com.safepath.backend.safety.securitylight;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;

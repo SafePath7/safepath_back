@@ -1,4 +1,4 @@
-package com.safepath.backend.safety.service;
+package com.safepath.backend.safety.securitylight;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -6,9 +6,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
 
-import com.safepath.backend.safety.client.SecurityLightApiClient;
 import com.safepath.backend.safety.dto.SafetyFacilityImportItem;
-import com.safepath.backend.safety.dto.SecurityLightApiResponse;
+import com.safepath.backend.safety.service.SafetyFacilitySyncService;
 
 import org.springframework.stereotype.Service;
 
