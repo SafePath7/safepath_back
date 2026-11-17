@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Optional;
+import java.util.List;
 
 import com.safepath.backend.safety.dto.SafetyFacilityImportItem;
 import com.safepath.backend.safety.entity.SafetyFacility;
@@ -44,6 +45,24 @@ class SafetyFacilitySyncServiceTest {
         assertEquals(37.5665, facility.getLatitude());
         assertEquals("Seoul", facility.getAddress());
         verify(facilities, never()).save(any());
+    }
+
+    @Test
+    void returnsCreatedAndUpdatedCountsForBatch() {
+        SafetyFacility existing = SafetyFacility.create(
+                "SECURITY_LIGHT", "LIGHT-100", 37.0, 126.0, "Old address", "SECURITY_LIGHT");
+        SafetyFacilityImportItem newItem = item();
+        SafetyFacilityImportItem existingItem = new SafetyFacilityImportItem(
+                "SECURITY_LIGHT", "LIGHT-100", 37.5670, 126.9790, "New address", "SECURITY_LIGHT");
+        when(facilities.findBySourceAndExternalId("CCTV", "CCTV-100")).thenReturn(Optional.empty());
+        when(facilities.findBySourceAndExternalId("SECURITY_LIGHT", "LIGHT-100"))
+                .thenReturn(Optional.of(existing));
+
+        SafetyFacilitySyncService.SyncResult result = service.syncAll(List.of(newItem, existingItem));
+
+        assertEquals(1, result.createdCount());
+        assertEquals(1, result.updatedCount());
+        assertEquals("New address", existing.getAddress());
     }
 
     private SafetyFacilityImportItem item() {
