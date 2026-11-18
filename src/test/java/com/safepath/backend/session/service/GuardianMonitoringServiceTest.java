@@ -28,7 +28,7 @@ class GuardianMonitoringServiceTest {
 	private final SelectedGuardianStore selectedGuardianStore = new SelectedGuardianStore(activeSessionStore);
 	private final GuardianPermissionService permissionService = mock(GuardianPermissionService.class);
 	private final GuardianPermissionService selectionPermissionService = mock(GuardianPermissionService.class);
-	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new GuardianSelectionService(activeSessionStore, selectedGuardianStore, selectionPermissionService));
+	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new GuardianSelectionService(activeSessionStore, selectedGuardianStore, selectionPermissionService), mock(com.safepath.backend.notification.NotificationService.class));
 	private final GuardianMonitoringService monitoringService = new GuardianMonitoringService(
 			activeSessionStore, permissionService, selectedGuardianStore, new SessionChannelStore());
 	private ActiveSession session;

@@ -481,6 +481,10 @@ class SafeReturnSessionControllerTest {
 	})
 	static class TestWebConfiguration {
 		@Bean
+		com.safepath.backend.notification.NotificationService notificationService() {
+			return mock(com.safepath.backend.notification.NotificationService.class);
+		}
+		@Bean
 		SessionChannelStore sessionChannelStore() {
 			return spy(new SessionChannelStore());
 		}

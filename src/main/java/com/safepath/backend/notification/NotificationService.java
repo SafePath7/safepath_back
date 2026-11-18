@@ -8,6 +8,8 @@ import com.google.firebase.messaging.Notification;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -151,6 +153,48 @@ public class NotificationService {
 			log.warn("Failed to send guardian request notification. requesterId={}, guardianId={}", requesterId, guardianId, e);
 			return new NotificationResult(0, 1);
 		}
+	}
+
+	public NotificationResult sendSessionStartedNotification(long userId, UUID sessionId, Set<Long> guardianIds) {
+		return sendSessionNotification(userId, sessionId, guardianIds, true);
+	}
+
+	public NotificationResult sendSessionEndedNotification(long userId, UUID sessionId, Set<Long> guardianIds) {
+		return sendSessionNotification(userId, sessionId, guardianIds, false);
+	}
+
+	private NotificationResult sendSessionNotification(long userId, UUID sessionId, Set<Long> guardianIds, boolean started) {
+		if (userId <= 0 || sessionId == null || guardianIds == null) {
+			throw new IllegalArgumentException("User, session and selected guardians are required.");
+		}
+		int successCount = 0;
+		int failureCount = 0;
+		for (Long guardianId : guardianIds) {
+			try {
+				if (guardianId == null || guardianId <= 0) {
+					throw new IllegalArgumentException("Guardian ID must be positive.");
+				}
+				Optional<GuardianRequestTarget> target = findGuardianRequestTarget(userId, guardianId);
+				if (target.isEmpty() || target.get().fcmToken() == null || target.get().fcmToken().isBlank()) {
+					continue;
+				}
+				Message message = Message.builder()
+						.setToken(target.get().fcmToken())
+						.setNotification(Notification.builder()
+								.setTitle(started ? "안전 귀가 시작" : "안전 귀가 종료")
+								.setBody(target.get().requesterName() + (started ? "님이 안전 귀가를 시작했습니다." : "님이 안전 귀가를 종료했습니다."))
+								.build())
+						.putAllData(Map.of("type", started ? "SESSION_STARTED" : "SESSION_ENDED",
+								"userId", String.valueOf(userId), "sessionId", sessionId.toString()))
+						.build();
+				FirebaseMessaging.getInstance().send(message);
+				successCount++;
+			} catch (FirebaseMessagingException | RuntimeException failure) {
+				failureCount++;
+				log.warn("Session notification failed. sessionId={}, guardianId={}, started={}", sessionId, guardianId, started, failure);
+			}
+		}
+		return new NotificationResult(successCount, failureCount);
 	}
 
 	/**

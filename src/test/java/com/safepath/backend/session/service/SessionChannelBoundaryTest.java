@@ -46,7 +46,7 @@ class SessionChannelBoundaryTest {
 	private final GuardianPermissionService permissions = new GuardianPermissionAdapterService(registrations);
 	private final GuardianSelectionService selection = new GuardianSelectionService(sessions, selected, permissions);
 	private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(
-			sessions, selected, mappings, channels, selection);
+			sessions, selected, mappings, channels, selection, mock(com.safepath.backend.notification.NotificationService.class));
 	private final GuardianMonitoringService monitoring = new GuardianMonitoringService(
 			sessions, permissions, selected, mappings);
 	private final GuardianRegistration registration = BeanUtils.instantiateClass(GuardianRegistration.class);

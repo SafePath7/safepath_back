@@ -40,8 +40,9 @@ class GuardianSessionStartTest {
 	private final InMemoryChannelRegistry channels = spy(new InMemoryChannelRegistry());
 	private final GuardianPermissionService permissions = mock(GuardianPermissionService.class);
 	private final GuardianSelectionService selection = new GuardianSelectionService(sessions, selected, permissions);
+	private final com.safepath.backend.notification.NotificationService notifications = mock(com.safepath.backend.notification.NotificationService.class);
 	private final SafeReturnSessionService service = new SafeReturnSessionService(
-			sessions, selected, mappings, channels, selection);
+			sessions, selected, mappings, channels, selection, notifications);
 
 	@Test
 	void oneGuardianStartsWithMatchingSelectionChannelAndMapping() {
@@ -53,6 +54,7 @@ class GuardianSessionStartTest {
 		assertTrue(channels.isParticipant(channel, 43L));
 		assertFalse(channels.isLocationPublisher(channel, 43L));
 		verify(channels, times(1)).open(42L, Set.of(43L));
+		verify(notifications).sendSessionStartedNotification(42L, session.id(), Set.of(43L));
 	}
 
 	@Test
@@ -131,6 +133,7 @@ class GuardianSessionStartTest {
 		assertTrue(sessions.findByUserId(42L).isEmpty());
 		assertTrue(selected.findBySessionId(id.getValue()).isEmpty());
 		assertTrue(mappings.findBySessionId(id.getValue()).isEmpty());
+		verify(notifications, never()).sendSessionStartedNotification(org.mockito.ArgumentMatchers.anyLong(), any(), any());
 	}
 
 	@Test
@@ -238,6 +241,31 @@ class GuardianSessionStartTest {
 		assertTrue(selected.findBySessionId(session.id()).isEmpty());
 		assertTrue(mappings.findBySessionId(session.id()).isEmpty());
 		assertFalse(channels.exists(channel));
+		verify(notifications).sendSessionEndedNotification(42L, session.id(), Set.of(43L));
+	}
+
+	@Test
+	void notificationFailuresDoNotPreventStartOrEnd() {
+		allow(43L);
+		doThrow(new IllegalStateException("Unavailable")).when(notifications)
+				.sendSessionStartedNotification(org.mockito.ArgumentMatchers.eq(42L), any(), any());
+		doThrow(new IllegalStateException("Unavailable")).when(notifications)
+				.sendSessionEndedNotification(org.mockito.ArgumentMatchers.eq(42L), any(), any());
+		var session = service.startSession(42L, List.of(43L));
+		assertTrue(sessions.findById(session.id()).isPresent());
+		service.endSession(session.id(), 42L);
+		assertTrue(sessions.findById(session.id()).isEmpty());
+	}
+
+	@Test
+	void failedEndDoesNotSendEndNotification() {
+		allow(43L);
+		var session = service.startSession(42L, List.of(43L));
+		String channel = mappings.findBySessionId(session.id()).orElseThrow();
+		doThrow(new IllegalStateException("Unavailable")).when(channels).close(channel);
+		assertThrows(SessionChannelException.class, () -> service.endSession(session.id(), 42L));
+		verify(notifications, never()).sendSessionEndedNotification(org.mockito.ArgumentMatchers.anyLong(), any(), any());
+		assertTrue(sessions.findById(session.id()).isPresent());
 	}
 
 	private void allow(Long guardianId) {
@@ -254,5 +282,7 @@ class GuardianSessionStartTest {
 		verify(channels, never()).open(any(), any());
 		verify(selected, never()).save(any(), any());
 		verify(mappings, never()).save(any(), any());
+		verify(notifications, never()).sendSessionStartedNotification(org.mockito.ArgumentMatchers.anyLong(), any(), any());
+		verify(notifications, never()).sendSessionEndedNotification(org.mockito.ArgumentMatchers.anyLong(), any(), any());
 	}
 }

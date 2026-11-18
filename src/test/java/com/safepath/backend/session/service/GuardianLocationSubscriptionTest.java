@@ -46,7 +46,7 @@ class GuardianLocationSubscriptionTest {
 	private final GuardianPermissionService permissions = new GuardianPermissionAdapterService(
 			new GuardianRegistrationService(repository, mock(GuardianRequestNotifier.class)));
 	private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(
-			sessions, selected, mappings, channels, new GuardianSelectionService(sessions, selected, permissions));
+			sessions, selected, mappings, channels, new GuardianSelectionService(sessions, selected, permissions), mock(com.safepath.backend.notification.NotificationService.class));
 	private final GuardianMonitoringService monitoring = new GuardianMonitoringService(
 			sessions, permissions, selected, mappings);
 	private final GuardianRegistration registration = BeanUtils.instantiateClass(GuardianRegistration.class);

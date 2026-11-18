@@ -28,6 +28,8 @@ class GuardianPermissionBeanTest {
 					() -> mock(com.safepath.backend.user.UserService.class));
 			context.registerBean(GuardianRegistrationRepository.class, () -> repository);
 			context.registerBean(GuardianRequestNotifier.class, () -> mock(GuardianRequestNotifier.class));
+			context.registerBean(com.safepath.backend.notification.NotificationService.class,
+					() -> mock(com.safepath.backend.notification.NotificationService.class));
 			context.register(GuardianRegistrationService.class, InMemoryChannelRegistry.class);
 			context.scan("com.safepath.backend.session.service", "com.safepath.backend.session.store");
 			context.refresh();
