@@ -2,6 +2,11 @@ package com.safepath.backend.session.service;
 
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.store.ActiveSessionStore;
+import com.safepath.backend.session.store.SelectedGuardianStore;
+import com.safepath.backend.session.store.LatestLocationStore;
+import com.safepath.backend.session.store.SessionChannelStore;
+import com.safepath.backend.websocket.InMemoryChannelRegistry;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -26,11 +31,69 @@ class SafeReturnSessionServiceTest {
 
 	private ActiveSessionStore store;
 	private SafeReturnSessionService service;
+	private SelectedGuardianStore selectedGuardianStore;
 
 	@BeforeEach
 	void setUp() {
 		store = new ActiveSessionStore();
-		service = new SafeReturnSessionService(store);
+		selectedGuardianStore = new SelectedGuardianStore(store);
+		service = new SafeReturnSessionService(store, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new LatestLocationStore(store), new GuardianSelectionService(store, selectedGuardianStore, org.mockito.Mockito.mock(GuardianPermissionService.class)));
+	}
+
+	@Test
+	void successfulEndClearsOnlyItsSelectionAndRejectsLaterSaves() {
+		ActiveSession session = service.startSession(42L);
+		ActiveSession other = service.startSession(43L);
+		selectedGuardianStore.save(session.id(), Set.of(44L));
+		selectedGuardianStore.save(other.id(), Set.of(45L));
+		service.endSession(session.id(), 42L);
+		assertTrue(selectedGuardianStore.findBySessionId(session.id()).isEmpty());
+		assertEquals(Set.of(45L), selectedGuardianStore.findBySessionId(other.id()));
+		assertEquals(other, store.findById(other.id()).orElseThrow());
+		assertThrows(NoSuchElementException.class,
+				() -> selectedGuardianStore.save(session.id(), Set.of(44L)));
+	}
+
+	@Test
+	void failedEndDoesNotRemoveSelection() {
+		ActiveSession session = service.startSession(42L);
+		selectedGuardianStore.save(session.id(), Set.of(44L));
+		assertThrows(SecurityException.class, () -> service.endSession(session.id(), 43L));
+		assertEquals(Set.of(44L), selectedGuardianStore.findBySessionId(session.id()));
+		assertEquals(session, store.findById(session.id()).orElseThrow());
+		store.remove(session.id());
+		assertThrows(NoSuchElementException.class, () -> service.endSession(session.id(), 42L));
+		assertEquals(Set.of(44L), selectedGuardianStore.findBySessionId(session.id()));
+	}
+
+	@Test
+	void concurrentSelectionSaveAndEndCannotLeaveSelectionBehind() throws Exception {
+		try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+			for (int i = 0; i < 30; i++) {
+				ActiveSession session = service.startSession(42L);
+				selectedGuardianStore.save(session.id(), Set.of(44L));
+				CountDownLatch startGate = new CountDownLatch(1);
+				Future<?> save = executor.submit(() -> {
+					startGate.await();
+					try {
+						selectedGuardianStore.save(session.id(), Set.of(45L));
+					} catch (NoSuchElementException expected) {
+						// Ending first makes a late selection invalid.
+					}
+					return null;
+				});
+				Future<?> end = executor.submit(() -> {
+					startGate.await();
+					service.endSession(session.id(), 42L);
+					return null;
+				});
+				startGate.countDown();
+				save.get(5, java.util.concurrent.TimeUnit.SECONDS);
+				end.get(5, java.util.concurrent.TimeUnit.SECONDS);
+				assertTrue(store.findById(session.id()).isEmpty());
+				assertTrue(selectedGuardianStore.findBySessionId(session.id()).isEmpty());
+			}
+		}
 	}
 
 	@Test

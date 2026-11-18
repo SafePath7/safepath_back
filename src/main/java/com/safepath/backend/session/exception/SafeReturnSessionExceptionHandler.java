@@ -1,6 +1,8 @@
 package com.safepath.backend.session.exception;
 
 import com.safepath.backend.session.controller.SafeReturnSessionController;
+import com.safepath.backend.session.controller.GuardianMonitoringController;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import com.safepath.backend.session.dto.SessionApiErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +16,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import java.util.NoSuchElementException;
 
-@RestControllerAdvice(assignableTypes = SafeReturnSessionController.class)
+@RestControllerAdvice(assignableTypes = {SafeReturnSessionController.class, GuardianMonitoringController.class})
 public class SafeReturnSessionExceptionHandler {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(SafeReturnSessionExceptionHandler.class);
@@ -35,8 +37,8 @@ public class SafeReturnSessionExceptionHandler {
 		return error(HttpStatus.BAD_REQUEST, "INVALID_SESSION_ID", "The session ID is invalid.");
 	}
 
-	@ExceptionHandler(IllegalArgumentException.class)
-	public ResponseEntity<SessionApiErrorResponse> handleInvalidRequest(IllegalArgumentException exception) {
+	@ExceptionHandler({IllegalArgumentException.class, HttpMessageNotReadableException.class})
+	public ResponseEntity<SessionApiErrorResponse> handleInvalidRequest(Exception exception) {
 		return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "The request is invalid.");
 	}
 
