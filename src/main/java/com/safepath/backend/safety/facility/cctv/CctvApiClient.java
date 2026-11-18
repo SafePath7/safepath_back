@@ -2,7 +2,7 @@ package com.safepath.backend.safety.facility.cctv;
 
 import java.net.URI;
 
-import com.safepath.backend.safety.facility.SafetyFacilityApiRequestException;
+import com.safepath.backend.safety.facility.exception.SafetyFacilityApiRequestException;
 
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;

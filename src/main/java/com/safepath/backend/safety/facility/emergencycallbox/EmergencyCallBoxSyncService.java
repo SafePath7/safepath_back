@@ -3,8 +3,8 @@ package com.safepath.backend.safety.facility.emergencycallbox;
 import java.util.List;
 
 import com.safepath.backend.safety.facility.SafetyFacilityApiRetryExecutor;
-import com.safepath.backend.safety.facility.SafetyFacilityApiRetryExhaustedException;
-import com.safepath.backend.safety.facility.SafetyFacilityApiRequestException;
+import com.safepath.backend.safety.facility.exception.SafetyFacilityApiRetryExhaustedException;
+import com.safepath.backend.safety.facility.exception.SafetyFacilityApiRequestException;
 import com.safepath.backend.safety.dto.SafetyFacilityImportItem;
 import com.safepath.backend.safety.service.SafetyFacilitySyncService;
 

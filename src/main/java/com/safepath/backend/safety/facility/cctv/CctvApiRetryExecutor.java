@@ -2,6 +2,9 @@ package com.safepath.backend.safety.facility.cctv;
 
 import java.util.function.Supplier;
 
+import com.safepath.backend.safety.facility.cctv.exception.CctvApiRequestException;
+import com.safepath.backend.safety.facility.cctv.exception.CctvApiRetryExhaustedException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

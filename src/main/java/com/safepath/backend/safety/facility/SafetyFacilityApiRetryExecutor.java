@@ -2,6 +2,9 @@ package com.safepath.backend.safety.facility;
 
 import java.util.function.Supplier;
 
+import com.safepath.backend.safety.facility.exception.SafetyFacilityApiRequestException;
+import com.safepath.backend.safety.facility.exception.SafetyFacilityApiRetryExhaustedException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

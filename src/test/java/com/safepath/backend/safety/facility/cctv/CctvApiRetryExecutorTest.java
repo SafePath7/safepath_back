@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.safepath.backend.safety.facility.cctv.exception.CctvApiRequestException;
+import com.safepath.backend.safety.facility.cctv.exception.CctvApiRetryExhaustedException;
+
 import org.junit.jupiter.api.Test;
 
 class CctvApiRetryExecutorTest {

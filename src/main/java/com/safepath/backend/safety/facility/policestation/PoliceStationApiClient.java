@@ -2,7 +2,7 @@ package com.safepath.backend.safety.facility.policestation;
 
 import java.net.URI;
 
-import com.safepath.backend.safety.facility.SafetyFacilityApiRequestException;
+import com.safepath.backend.safety.facility.exception.SafetyFacilityApiRequestException;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;

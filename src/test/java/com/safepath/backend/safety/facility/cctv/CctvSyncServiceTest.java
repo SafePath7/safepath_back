@@ -11,7 +11,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 
-import com.safepath.backend.safety.facility.SafetyFacilityApiRequestException;
+import com.safepath.backend.safety.facility.exception.SafetyFacilityApiRequestException;
 import com.safepath.backend.safety.service.SafetyFacilitySyncService;
 
 import org.junit.jupiter.api.Test;

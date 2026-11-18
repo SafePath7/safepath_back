@@ -1,4 +1,4 @@
-package com.safepath.backend.safety.facility;
+package com.safepath.backend.safety.facility.exception;
 
 public final class SafetyFacilityApiRequestException extends RuntimeException {
     private final Integer httpStatus;

@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.safepath.backend.safety.facility.exception.SafetyFacilityApiRequestException;
+import com.safepath.backend.safety.facility.exception.SafetyFacilityApiRetryExhaustedException;
+
 import org.junit.jupiter.api.Test;
 
 class SafetyFacilityApiRetryExecutorTest {
