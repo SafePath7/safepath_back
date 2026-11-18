@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @ActiveProfiles("local")
 @Transactional
 class SafetyFacilityApiTests {
-    private static final String URL = "/api/v1/safety-facilities";
+    private static final String URL = "/api/safety-facilities";
 
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
@@ -46,10 +46,21 @@ class SafetyFacilityApiTests {
     @Test
     void returnsEveryFacilityInBoundsAtCloseKakaoMapLevel() throws Exception {
         mvc.perform(request(3)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(3))
-                .andExpect(jsonPath("$[0].facilityType").value("POLICE"))
-                .andExpect(jsonPath("$[2].address").value("Seoul"));
+                .andExpect(jsonPath("$.totalCount").value(3))
+                .andExpect(jsonPath("$.facilities.length()").value(3))
+                .andExpect(jsonPath("$.facilities[0].facilityType").value("POLICE"))
+                .andExpect(jsonPath("$.facilities[2].address").value("Seoul"));
         verifyNoInteractions(tokens);
+    }
+
+    @Test
+    void returnsClustersAtDistantKakaoMapLevel() throws Exception {
+        mvc.perform(request(7)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.mode").value("CLUSTER"))
+                .andExpect(jsonPath("$.totalCount").value(3))
+                .andExpect(jsonPath("$.clusters.length()").value(1))
+                .andExpect(jsonPath("$.clusters[0].count").value(3))
+                .andExpect(jsonPath("$.facilities.length()").value(0));
     }
 
     @Test

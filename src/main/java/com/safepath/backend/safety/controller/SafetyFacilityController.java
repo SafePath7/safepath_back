@@ -1,8 +1,6 @@
 package com.safepath.backend.safety.controller;
 
-import java.util.List;
-
-import com.safepath.backend.safety.dto.SafetyFacilityResponse;
+import com.safepath.backend.safety.dto.SafetyFacilityMapResponse;
 import com.safepath.backend.safety.service.SafetyFacilityService;
 
 import jakarta.validation.constraints.DecimalMax;
@@ -18,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Validated
 @RestController
-@RequestMapping("/api/v1/safety-facilities")
+@RequestMapping("/api/safety-facilities")
 public class SafetyFacilityController {
     private final SafetyFacilityService service;
 
@@ -27,7 +25,7 @@ public class SafetyFacilityController {
     }
 
     @GetMapping
-    public List<SafetyFacilityResponse> findInBounds(
+    public SafetyFacilityMapResponse findInBounds(
             @RequestParam @Min(1) @Max(14) int zoom,
             @RequestParam @DecimalMin("-90.0") @DecimalMax("90.0") double southWestLat,
             @RequestParam @DecimalMin("-180.0") @DecimalMax("180.0") double southWestLng,

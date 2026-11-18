@@ -2,21 +2,18 @@ package com.safepath.backend.safety.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
 
 import com.safepath.backend.safety.entity.SafetyFacility;
+import com.safepath.backend.safety.repository.SafetyFacilityClusterProjection;
 import com.safepath.backend.safety.repository.SafetyFacilityRepository;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.springframework.data.domain.Pageable;
 import org.springframework.web.server.ResponseStatusException;
 
 class SafetyFacilityServiceTest {
@@ -24,19 +21,19 @@ class SafetyFacilityServiceTest {
     private final SafetyFacilityService service = new SafetyFacilityService(facilities);
 
     @Test
-    void limitsResultsAtDistantAndMidKakaoMapLevels() {
-        SafetyFacility facility = facility(1L);
-        when(facilities.findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(
-                eq(37.0), eq(38.0), eq(126.0), eq(127.0), any(Pageable.class)))
-                .thenReturn(List.of(facility));
+    void returnsClustersAtNonDetailedKakaoMapLevels() {
+        SafetyFacilityClusterProjection cluster = cluster(37.5, 127.0, 12L);
+        when(facilities.countByLatitudeBetweenAndLongitudeBetween(37.0, 38.0, 126.0, 127.0)).thenReturn(1L);
+        when(facilities.findClustersInBounds(eq(37.0), eq(38.0), eq(126.0), eq(127.0), eq(0.08)))
+                .thenReturn(List.of(cluster));
 
-        service.findInBounds(7, 37.0, 126.0, 38.0, 127.0);
-        service.findInBounds(4, 37.0, 126.0, 38.0, 127.0);
-        ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
-        verify(facilities, times(2)).findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(
-                eq(37.0), eq(38.0), eq(126.0), eq(127.0), page.capture());
-        assertEquals(100, page.getAllValues().get(0).getPageSize());
-        assertEquals(300, page.getAllValues().get(1).getPageSize());
+        var distantResponse = service.findInBounds(7, 37.0, 126.0, 38.0, 127.0);
+
+        assertEquals("CLUSTER", distantResponse.mode());
+        assertEquals(1, distantResponse.totalCount());
+        assertEquals(0, distantResponse.facilities().size());
+        assertEquals(1, distantResponse.clusters().size());
+        assertEquals(12L, distantResponse.clusters().getFirst().count());
     }
 
     @Test
@@ -45,8 +42,13 @@ class SafetyFacilityServiceTest {
         SafetyFacility second = facility(2L);
         when(facilities.findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(37.0, 38.0, 126.0, 127.0))
                 .thenReturn(List.of(first, second));
+        when(facilities.countByLatitudeBetweenAndLongitudeBetween(37.0, 38.0, 126.0, 127.0)).thenReturn(2L);
 
-        assertEquals(2, service.findInBounds(3, 37.0, 126.0, 38.0, 127.0).size());
+        var response = service.findInBounds(3, 37.0, 126.0, 38.0, 127.0);
+
+        assertEquals("MARKER", response.mode());
+        assertEquals(2, response.facilities().size());
+        assertEquals(0, response.clusters().size());
         verify(facilities).findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(37.0, 38.0, 126.0, 127.0);
     }
 
@@ -65,5 +67,13 @@ class SafetyFacilityServiceTest {
         when(facility.getAddress()).thenReturn("Seoul");
         when(facility.getFacilityType()).thenReturn("SHELTER");
         return facility;
+    }
+
+    private SafetyFacilityClusterProjection cluster(double latitude, double longitude, long count) {
+        SafetyFacilityClusterProjection cluster = mock(SafetyFacilityClusterProjection.class);
+        when(cluster.getLatitude()).thenReturn(latitude);
+        when(cluster.getLongitude()).thenReturn(longitude);
+        when(cluster.getCount()).thenReturn(count);
+        return cluster;
     }
 }

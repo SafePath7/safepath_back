@@ -10,7 +10,7 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 @RestControllerAdvice(basePackages = {
-        "com.safepath.backend.guardian", "com.safepath.backend.risk"
+        "com.safepath.backend.guardian", "com.safepath.backend.risk", "com.safepath.backend.safety"
 })
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ApiException.class)
