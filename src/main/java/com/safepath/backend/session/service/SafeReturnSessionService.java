@@ -39,10 +39,6 @@ public class SafeReturnSessionService {
 		this.guardianSelectionService = guardianSelectionService;
 	}
 
-	public ActiveSession startSession(Long userId) {
-		return createSession(userId, Set.of());
-	}
-
 	public ActiveSession startSession(Long userId, Collection<Long> guardianIds) {
 		Set<Long> validated = guardianSelectionService.validateForStart(userId, guardianIds);
 		return createSession(userId, validated);
@@ -58,9 +54,7 @@ public class SafeReturnSessionService {
 			activeSessionStore.saveSession(session);
 			String channelId = null;
 			try {
-				if (!guardianIds.isEmpty()) {
-					selectedGuardianStore.save(session.id(), guardianIds);
-				}
+				selectedGuardianStore.save(session.id(), guardianIds);
 				channelId = channelRegistry.open(userId, guardianIds);
 				sessionChannelStore.save(session.id(), channelId);
 			} catch (RuntimeException failure) {

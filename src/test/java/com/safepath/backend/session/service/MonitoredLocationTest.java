@@ -34,11 +34,12 @@ class MonitoredLocationTest {
 	private final SelectedGuardianStore selected = new SelectedGuardianStore(sessions);
 	private final LatestLocationStore locations = spy(new LatestLocationStore(sessions));
 	private final InMemoryChannelRegistry channels = spy(new InMemoryChannelRegistry());
+	private final GuardianPermissionService selectionPermissions = mock(GuardianPermissionService.class);
 	private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(sessions, selected,
-			new SessionChannelStore(), channels, locations, new GuardianSelectionService(sessions, selected, org.mockito.Mockito.mock(GuardianPermissionService.class)));
+			new SessionChannelStore(), channels, locations, new GuardianSelectionService(sessions, selected, selectionPermissions));
 	private final GuardianPermissionService permissions = mock(GuardianPermissionService.class);
 	private final GuardianMonitoringService monitoring = new GuardianMonitoringService(sessions, permissions, selected, locations, new SessionChannelStore());
-	private final ActiveSession session = lifecycle.startSession(42L);
+	private final ActiveSession session = startSession();
 	private final LocationUpdateRequest measurement = new LocationUpdateRequest(37.5, 127, null, Instant.now());
 
 	@Test
@@ -128,5 +129,11 @@ class MonitoredLocationTest {
 		selected.save(session.id(), Set.of(43L));
 		when(permissions.hasAcceptedRelationship(42L, 43L)).thenReturn(true);
 		when(permissions.hasPermission(42L, 43L, MonitoringPermissionType.LOCATION)).thenReturn(true);
+	}
+
+	private ActiveSession startSession() {
+		when(selectionPermissions.hasAcceptedRelationship(42L, 43L)).thenReturn(true);
+		when(selectionPermissions.hasPermission(42L, 43L, MonitoringPermissionType.LOCATION)).thenReturn(true);
+		return lifecycle.startSession(42L, Set.of(43L));
 	}
 }

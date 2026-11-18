@@ -225,7 +225,8 @@ class SessionChannelBoundaryTest {
 
 	@Test
 	void guardianCannotWriteEvenIfTheyOwnAnotherActiveSession() {
-		lifecycle.startSession(43L);
+		acceptedRegistration(43L, 44L);
+		lifecycle.startSession(43L, List.of(44L));
 		assertThrows(SecurityException.class,
 				() -> lifecycle.updateLocation(session.id(), channelId, 43L, measurement(measuredAt)));
 		assertThrows(SecurityException.class, () -> lifecycle.updateLocation(channelId, 43L, measurement(measuredAt)));
@@ -234,7 +235,8 @@ class SessionChannelBoundaryTest {
 
 	@Test
 	void mismatchedSessionChannelIsDeniedAndOtherSessionSurvivesEnd() {
-		var other = lifecycle.startSession(45L);
+		acceptedRegistration(45L, 46L);
+		var other = lifecycle.startSession(45L, List.of(46L));
 		String otherChannel = mappings.findBySessionId(other.id()).orElseThrow();
 		var otherLocation = measurement(measuredAt);
 		lifecycle.updateLocation(otherChannel, 45L, otherLocation);

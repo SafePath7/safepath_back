@@ -28,7 +28,8 @@ class GuardianMonitoringServiceTest {
 	private final ActiveSessionStore activeSessionStore = new ActiveSessionStore();
 	private final SelectedGuardianStore selectedGuardianStore = new SelectedGuardianStore(activeSessionStore);
 	private final GuardianPermissionService permissionService = mock(GuardianPermissionService.class);
-	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new LatestLocationStore(activeSessionStore), new GuardianSelectionService(activeSessionStore, selectedGuardianStore, org.mockito.Mockito.mock(GuardianPermissionService.class)));
+	private final GuardianPermissionService selectionPermissionService = mock(GuardianPermissionService.class);
+	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new LatestLocationStore(activeSessionStore), new GuardianSelectionService(activeSessionStore, selectedGuardianStore, selectionPermissionService));
 	private final GuardianMonitoringService monitoringService = new GuardianMonitoringService(
 			activeSessionStore, permissionService, selectedGuardianStore, new LatestLocationStore(activeSessionStore), new SessionChannelStore());
 	private ActiveSession session;
@@ -37,8 +38,9 @@ class GuardianMonitoringServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		session = sessionService.startSession(OWNER_ID);
-		selectedGuardianStore.save(session.id(), Set.of(GUARDIAN_ID));
+		when(selectionPermissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
+		when(selectionPermissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION)).thenReturn(true);
+		session = sessionService.startSession(OWNER_ID, Set.of(GUARDIAN_ID));
 	}
 
 	@Test

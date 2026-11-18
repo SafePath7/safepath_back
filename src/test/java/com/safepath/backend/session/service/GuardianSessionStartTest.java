@@ -219,7 +219,8 @@ class GuardianSessionStartTest {
 
 	@Test
 	void failedNewStartLeavesExistingOtherSessionUntouched() {
-		var other = service.startSession(45L);
+		allowFor(45L, 46L);
+		var other = service.startSession(45L, List.of(46L));
 		String otherChannel = mappings.findBySessionId(other.id()).orElseThrow();
 		selected.save(other.id(), Set.of(46L));
 		allow(43L);
@@ -246,8 +247,12 @@ class GuardianSessionStartTest {
 	}
 
 	private void allow(Long guardianId) {
-		when(permissions.hasAcceptedRelationship(42L, guardianId)).thenReturn(true);
-		when(permissions.hasPermission(42L, guardianId, MonitoringPermissionType.LOCATION)).thenReturn(true);
+		allowFor(42L, guardianId);
+	}
+
+	private void allowFor(Long ownerId, Long guardianId) {
+		when(permissions.hasAcceptedRelationship(ownerId, guardianId)).thenReturn(true);
+		when(permissions.hasPermission(ownerId, guardianId, MonitoringPermissionType.LOCATION)).thenReturn(true);
 	}
 
 	private void assertNoResources() {

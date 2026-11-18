@@ -35,16 +35,18 @@ class SessionChannelLifecycleTest {
 	private final SelectedGuardianStore guardians = new SelectedGuardianStore(sessions);
 	private final SessionChannelStore mappings = spy(new SessionChannelStore());
 	private final InMemoryChannelRegistry channels = spy(new InMemoryChannelRegistry());
-	private final SafeReturnSessionService service = new SafeReturnSessionService(sessions, guardians, mappings, channels, new LatestLocationStore(sessions), new GuardianSelectionService(sessions, guardians, org.mockito.Mockito.mock(GuardianPermissionService.class)));
+	private final GuardianPermissionService permissions = org.mockito.Mockito.mock(GuardianPermissionService.class);
+	private final SafeReturnSessionService service = new SafeReturnSessionService(sessions, guardians, mappings, channels, new LatestLocationStore(sessions), new GuardianSelectionService(sessions, guardians, permissions));
 
 	@Test
-	void startsExactlyOneOwnerOnlyChannelAndEndsItWithoutAffectingAnotherSession() {
-		ActiveSession session = service.startSession(42L);
+	void startsGuardianChannelAndEndsItWithoutAffectingAnotherSession() {
+		ActiveSession session = startSession(42L);
 		String channelId = mappings.findBySessionId(session.id()).orElseThrow();
-		verify(channels).open(42L, Set.of());
+		verify(channels).open(42L, Set.of(1042L));
 		assertTrue(channels.isLocationPublisher(channelId, 42L));
 		assertFalse(channels.isParticipant(channelId, 43L));
-		ActiveSession other = service.startSession(43L);
+		assertTrue(channels.isParticipant(channelId, 1042L));
+		ActiveSession other = startSession(43L);
 		String otherChannelId = mappings.findBySessionId(other.id()).orElseThrow();
 		guardians.save(session.id(), Set.of(44L));
 
@@ -60,9 +62,9 @@ class SessionChannelLifecycleTest {
 
 	@Test
 	void duplicateStartDoesNotCreateAnotherChannel() {
-		ActiveSession session = service.startSession(42L);
+		ActiveSession session = startSession(42L);
 		String channelId = mappings.findBySessionId(session.id()).orElseThrow();
-		assertThrows(IllegalStateException.class, () -> service.startSession(42L));
+		assertThrows(IllegalStateException.class, () -> startSession(42L));
 		verify(channels, times(1)).open(anyLong(), any());
 		assertTrue(channels.exists(channelId));
 		assertSame(session, sessions.findByUserId(42L).orElseThrow());
@@ -70,7 +72,7 @@ class SessionChannelLifecycleTest {
 
 	@Test
 	void wrongOwnerAndMissingSessionCannotCloseExistingChannel() {
-		ActiveSession session = service.startSession(42L);
+		ActiveSession session = startSession(42L);
 		String channelId = mappings.findBySessionId(session.id()).orElseThrow();
 		assertThrows(SecurityException.class, () -> service.endSession(session.id(), 43L));
 		assertThrows(java.util.NoSuchElementException.class, () -> service.endSession(UUID.randomUUID(), 42L));
@@ -82,10 +84,10 @@ class SessionChannelLifecycleTest {
 
 	@Test
 	void channelCreationFailureRemovesOnlyNewSessionAndAllowsRetry() {
-		ActiveSession other = service.startSession(43L);
+		ActiveSession other = startSession(43L);
 		String otherChannelId = mappings.findBySessionId(other.id()).orElseThrow();
-		doThrow(new IllegalStateException("Channel unavailable")).when(channels).open(42L, Set.of());
-		assertThrows(SessionChannelException.class, () -> service.startSession(42L));
+		doThrow(new IllegalStateException("Channel unavailable")).when(channels).open(42L, Set.of(1042L));
+		assertThrows(SessionChannelException.class, () -> startSession(42L));
 		assertTrue(sessions.findByUserId(42L).isEmpty());
 		assertTrue(channels.exists(otherChannelId));
 		assertSame(other, sessions.findById(other.id()).orElseThrow());
@@ -94,7 +96,7 @@ class SessionChannelLifecycleTest {
 	@Test
 	void mappingFailureClosesNewChannelAndRemovesNewSession() {
 		doThrow(new IllegalStateException("Mapping unavailable")).when(mappings).save(any(), any());
-		assertThrows(SessionChannelException.class, () -> service.startSession(42L));
+		assertThrows(SessionChannelException.class, () -> startSession(42L));
 		assertTrue(sessions.findByUserId(42L).isEmpty());
 		var channelId = org.mockito.ArgumentCaptor.forClass(String.class);
 		verify(channels).close(channelId.capture());
@@ -103,7 +105,7 @@ class SessionChannelLifecycleTest {
 
 	@Test
 	void failedEndPreservesResourcesUntilSuccessfulRetry() {
-		ActiveSession session = service.startSession(42L);
+		ActiveSession session = startSession(42L);
 		String channelId = mappings.findBySessionId(session.id()).orElseThrow();
 		guardians.save(session.id(), Set.of(44L));
 		doThrow(new IllegalStateException("Close unavailable")).when(channels).close(channelId);
@@ -125,7 +127,7 @@ class SessionChannelLifecycleTest {
 			invocation.callRealMethod();
 			throw new IllegalStateException("Mapping completion failed");
 		}).when(mappings).save(any(), any());
-		assertThrows(SessionChannelException.class, () -> service.startSession(42L));
+		assertThrows(SessionChannelException.class, () -> startSession(42L));
 		var sessionId = org.mockito.ArgumentCaptor.forClass(UUID.class);
 		var channelId = org.mockito.ArgumentCaptor.forClass(String.class);
 		verify(mappings).save(sessionId.capture(), channelId.capture());
@@ -141,7 +143,7 @@ class SessionChannelLifecycleTest {
 			throw new IllegalStateException("Mapping completion failed");
 		}).when(mappings).save(any(), any());
 		doThrow(new IllegalStateException("Close unavailable")).when(channels).close(any());
-		assertThrows(SessionChannelException.class, () -> service.startSession(42L));
+		assertThrows(SessionChannelException.class, () -> startSession(42L));
 		ActiveSession session = sessions.findByUserId(42L).orElseThrow();
 		String channelId = mappings.findBySessionId(session.id()).orElseThrow();
 		assertTrue(channels.exists(channelId));
@@ -161,7 +163,7 @@ class SessionChannelLifecycleTest {
 				results.add(executor.submit(() -> {
 					startGate.await();
 					try {
-						service.startSession(42L);
+						startSession(42L);
 						return true;
 					} catch (IllegalStateException duplicate) {
 						return false;
@@ -174,9 +176,17 @@ class SessionChannelLifecycleTest {
 				if (result.get(5, TimeUnit.SECONDS)) successfulStarts++;
 			}
 			assertEquals(1, successfulStarts);
-			verify(channels, times(1)).open(42L, Set.of());
+			verify(channels, times(1)).open(42L, Set.of(1042L));
 			ActiveSession session = sessions.findByUserId(42L).orElseThrow();
 			assertTrue(channels.exists(mappings.findBySessionId(session.id()).orElseThrow()));
 		}
+	}
+
+	private ActiveSession startSession(Long userId) {
+		Long guardianId = userId + 1000;
+		org.mockito.Mockito.when(permissions.hasAcceptedRelationship(userId, guardianId)).thenReturn(true);
+		org.mockito.Mockito.when(permissions.hasPermission(userId, guardianId,
+				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(true);
+		return service.startSession(userId, List.of(guardianId));
 	}
 }

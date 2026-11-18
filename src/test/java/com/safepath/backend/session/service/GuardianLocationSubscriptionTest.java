@@ -185,7 +185,8 @@ class GuardianLocationSubscriptionTest {
 
 	@Test
 	void anotherActiveSessionDoesNotAuthorizeAccessToItsChannel() {
-		ActiveSession other = lifecycle.startSession(45L);
+		when(repository.findByUserIdAndGuardianId(45L, 46L)).thenReturn(Optional.of(registration));
+		ActiveSession other = lifecycle.startSession(45L, List.of(46L));
 		String otherChannel = mappings.findBySessionId(other.id()).orElseThrow();
 		assertThrows(AccessDeniedException.class,
 				() -> monitoring.validateGuardianLocationSubscription(otherChannel, 43L));
