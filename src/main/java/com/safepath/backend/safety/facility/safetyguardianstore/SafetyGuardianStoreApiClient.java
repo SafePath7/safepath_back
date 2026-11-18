@@ -2,9 +2,13 @@ package com.safepath.backend.safety.facility.safetyguardianstore;
 
 import java.net.URI;
 
+import com.safepath.backend.safety.facility.SafetyFacilityApiRequestException;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
@@ -33,10 +37,14 @@ public class SafetyGuardianStoreApiClient {
                 .encode()
                 .toUri();
 
-        SafetyGuardianStoreApiResponse response = restClient.get()
-                .uri(requestUri)
-                .retrieve()
-                .body(SafetyGuardianStoreApiResponse.class);
+        SafetyGuardianStoreApiResponse response;
+        try {
+            response = restClient.get().uri(requestUri).retrieve().body(SafetyGuardianStoreApiResponse.class);
+        } catch (RestClientResponseException e) {
+            throw SafetyFacilityApiRequestException.httpFailure("Safety guardian store", pageNo, e.getStatusCode().value(), e.getStatusText(), e);
+        } catch (ResourceAccessException e) {
+            throw SafetyFacilityApiRequestException.networkFailure("Safety guardian store", pageNo, e);
+        }
         if (response == null) {
             throw new IllegalStateException("Safety guardian store API returned an empty response");
         }

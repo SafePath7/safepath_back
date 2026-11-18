@@ -2,9 +2,13 @@ package com.safepath.backend.safety.facility.policestation;
 
 import java.net.URI;
 
+import com.safepath.backend.safety.facility.SafetyFacilityApiRequestException;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
@@ -33,10 +37,14 @@ public class PoliceStationApiClient {
                 .encode()
                 .toUri();
 
-        PoliceStationApiResponse response = restClient.get()
-                .uri(requestUri)
-                .retrieve()
-                .body(PoliceStationApiResponse.class);
+        PoliceStationApiResponse response;
+        try {
+            response = restClient.get().uri(requestUri).retrieve().body(PoliceStationApiResponse.class);
+        } catch (RestClientResponseException e) {
+            throw SafetyFacilityApiRequestException.httpFailure("Police station", pageNo, e.getStatusCode().value(), e.getStatusText(), e);
+        } catch (ResourceAccessException e) {
+            throw SafetyFacilityApiRequestException.networkFailure("Police station", pageNo, e);
+        }
         if (response == null) {
             throw new IllegalStateException("Police station API returned an empty response");
         }

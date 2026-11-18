@@ -17,15 +17,18 @@ public class EmergencyCallBoxSyncScheduler {
 
     private final EmergencyCallBoxSyncService syncService;
     private final SafetyFacilitySyncService facilitySyncService;
+    private final int startPage;
     private final int maxPages;
     private boolean initialSync = true;
 
     public EmergencyCallBoxSyncScheduler(
             EmergencyCallBoxSyncService syncService,
             SafetyFacilitySyncService facilitySyncService,
+            @Value("${safepath.emergency-call-box.sync.start-page:1}") int startPage,
             @Value("${safepath.emergency-call-box.sync.max-pages:0}") int maxPages) {
         this.syncService = syncService;
         this.facilitySyncService = facilitySyncService;
+        this.startPage = startPage;
         this.maxPages = maxPages;
     }
 
@@ -38,7 +41,8 @@ public class EmergencyCallBoxSyncScheduler {
             return;
         }
 
-        EmergencyCallBoxSyncService.SyncResult result = syncService.syncAll(maxPages);
+        log.info("Emergency call box sync started: startPage={}, maxPages={}", startPage, maxPages);
+        EmergencyCallBoxSyncService.SyncResult result = syncService.syncAll(startPage, maxPages);
         log.info("Emergency call box sync completed: pages={}, total={}, created={}, updated={}",
                 result.pageCount(), result.totalCount(), result.createdCount(), result.updatedCount());
     }
@@ -48,6 +52,6 @@ public class EmergencyCallBoxSyncScheduler {
             return false;
         }
         initialSync = false;
-        return facilitySyncService.hasFacilities(SOURCE);
+        return startPage == 1 && facilitySyncService.hasFacilities(SOURCE);
     }
 }

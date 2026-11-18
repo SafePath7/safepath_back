@@ -2,9 +2,13 @@ package com.safepath.backend.safety.facility.emergencycallbox;
 
 import java.net.URI;
 
+import com.safepath.backend.safety.facility.SafetyFacilityApiRequestException;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
@@ -33,10 +37,14 @@ public class EmergencyCallBoxApiClient {
                 .encode()
                 .toUri();
 
-        EmergencyCallBoxApiResponse response = restClient.get()
-                .uri(requestUri)
-                .retrieve()
-                .body(EmergencyCallBoxApiResponse.class);
+        EmergencyCallBoxApiResponse response;
+        try {
+            response = restClient.get().uri(requestUri).retrieve().body(EmergencyCallBoxApiResponse.class);
+        } catch (RestClientResponseException e) {
+            throw SafetyFacilityApiRequestException.httpFailure("Emergency call box", pageNo, e.getStatusCode().value(), e.getStatusText(), e);
+        } catch (ResourceAccessException e) {
+            throw SafetyFacilityApiRequestException.networkFailure("Emergency call box", pageNo, e);
+        }
         if (response == null) {
             throw new IllegalStateException("Emergency call box API returned an empty response");
         }

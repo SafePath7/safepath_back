@@ -2,9 +2,13 @@ package com.safepath.backend.safety.facility.securitylight;
 
 import java.net.URI;
 
+import com.safepath.backend.safety.facility.SafetyFacilityApiRequestException;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
@@ -33,10 +37,14 @@ public class SecurityLightApiClient {
                 .encode()
                 .toUri();
 
-        SecurityLightApiResponse response = restClient.get()
-                .uri(requestUri)
-                .retrieve()
-                .body(SecurityLightApiResponse.class);
+        SecurityLightApiResponse response;
+        try {
+            response = restClient.get().uri(requestUri).retrieve().body(SecurityLightApiResponse.class);
+        } catch (RestClientResponseException e) {
+            throw SafetyFacilityApiRequestException.httpFailure("Security light", pageNo, e.getStatusCode().value(), e.getStatusText(), e);
+        } catch (ResourceAccessException e) {
+            throw SafetyFacilityApiRequestException.networkFailure("Security light", pageNo, e);
+        }
         if (response == null) {
             throw new IllegalStateException("Security light API returned an empty response");
         }

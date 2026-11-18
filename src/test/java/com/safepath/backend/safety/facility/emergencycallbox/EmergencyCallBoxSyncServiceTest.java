@@ -59,6 +59,17 @@ class EmergencyCallBoxSyncServiceTest {
         assertEquals(1_000, result.totalCount());
     }
 
+    @Test
+    void startsFromConfiguredPage() {
+        when(apiClient.fetch(887, 100)).thenReturn(response(887, 88_621, List.of(item("887", "37.5665", "126.9780"))));
+        when(facilitySyncService.syncAll(any())).thenReturn(new SafetyFacilitySyncService.SyncResult(1, 0));
+
+        EmergencyCallBoxSyncService.SyncResult result = service.syncAll(887, 0);
+
+        assertEquals(887, result.pageCount());
+        verify(apiClient).fetch(887, 100);
+    }
+
     private EmergencyCallBoxApiResponse response(
             int pageNo,
             int totalCount,

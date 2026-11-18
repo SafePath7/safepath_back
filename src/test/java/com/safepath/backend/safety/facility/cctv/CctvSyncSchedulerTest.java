@@ -14,12 +14,12 @@ class CctvSyncSchedulerTest {
     void syncsAllPages() {
         CctvSyncService syncService = mock(CctvSyncService.class);
         SafetyFacilitySyncService facilitySyncService = mock(SafetyFacilitySyncService.class);
-        when(syncService.syncAll(100)).thenReturn(new CctvSyncService.SyncResult(100, 381_469, 1, 0));
-        CctvSyncScheduler scheduler = new CctvSyncScheduler(syncService, facilitySyncService, 100);
+        when(syncService.syncAll(1, 100)).thenReturn(new CctvSyncService.SyncResult(100, 381_469, 1, 0));
+        CctvSyncScheduler scheduler = new CctvSyncScheduler(syncService, facilitySyncService, 1, 100);
 
         scheduler.sync();
 
-        verify(syncService).syncAll(100);
+        verify(syncService).syncAll(1, 100);
     }
 
     @Test
@@ -27,8 +27,8 @@ class CctvSyncSchedulerTest {
         CctvSyncService syncService = mock(CctvSyncService.class);
         SafetyFacilitySyncService facilitySyncService = mock(SafetyFacilitySyncService.class);
         when(facilitySyncService.hasFacilities("CCTV")).thenReturn(true);
-        when(syncService.syncAll(0)).thenReturn(new CctvSyncService.SyncResult(1, 1, 0, 1));
-        CctvSyncScheduler scheduler = new CctvSyncScheduler(syncService, facilitySyncService, 0);
+        when(syncService.syncAll(1, 0)).thenReturn(new CctvSyncService.SyncResult(1, 1, 0, 1));
+        CctvSyncScheduler scheduler = new CctvSyncScheduler(syncService, facilitySyncService, 1, 0);
 
         scheduler.sync();
 
@@ -36,6 +36,6 @@ class CctvSyncSchedulerTest {
 
         scheduler.sync();
 
-        verify(syncService).syncAll(0);
+        verify(syncService).syncAll(1, 0);
     }
 }

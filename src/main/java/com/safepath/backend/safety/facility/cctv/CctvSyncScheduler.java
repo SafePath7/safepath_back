@@ -17,15 +17,18 @@ public class CctvSyncScheduler {
 
     private final CctvSyncService syncService;
     private final SafetyFacilitySyncService facilitySyncService;
+    private final int startPage;
     private final int maxPages;
     private boolean initialSync = true;
 
     public CctvSyncScheduler(
             CctvSyncService syncService,
             SafetyFacilitySyncService facilitySyncService,
+            @Value("${safepath.cctv.sync.start-page:1}") int startPage,
             @Value("${safepath.cctv.sync.max-pages:0}") int maxPages) {
         this.syncService = syncService;
         this.facilitySyncService = facilitySyncService;
+        this.startPage = startPage;
         this.maxPages = maxPages;
     }
 
@@ -38,7 +41,8 @@ public class CctvSyncScheduler {
             return;
         }
 
-        CctvSyncService.SyncResult result = syncService.syncAll(maxPages);
+        log.info("CCTV sync started: startPage={}, maxPages={}", startPage, maxPages);
+        CctvSyncService.SyncResult result = syncService.syncAll(startPage, maxPages);
         log.info("CCTV sync completed: pages={}, total={}, created={}, updated={}",
                 result.pageCount(), result.totalCount(), result.createdCount(), result.updatedCount());
     }
@@ -48,6 +52,6 @@ public class CctvSyncScheduler {
             return false;
         }
         initialSync = false;
-        return facilitySyncService.hasFacilities(SOURCE);
+        return startPage == 1 && facilitySyncService.hasFacilities(SOURCE);
     }
 }

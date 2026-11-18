@@ -13,11 +13,11 @@ class EmergencyCallBoxSyncSchedulerTest {
     void syncsConfiguredMaximumPageCount() {
         EmergencyCallBoxSyncService syncService = mock(EmergencyCallBoxSyncService.class);
         SafetyFacilitySyncService facilitySyncService = mock(SafetyFacilitySyncService.class);
-        when(syncService.syncAll(100)).thenReturn(new EmergencyCallBoxSyncService.SyncResult(100, 88_634, 1, 0));
-        EmergencyCallBoxSyncScheduler scheduler = new EmergencyCallBoxSyncScheduler(syncService, facilitySyncService, 100);
+        when(syncService.syncAll(1, 100)).thenReturn(new EmergencyCallBoxSyncService.SyncResult(100, 88_634, 1, 0));
+        EmergencyCallBoxSyncScheduler scheduler = new EmergencyCallBoxSyncScheduler(syncService, facilitySyncService, 1, 100);
 
         scheduler.sync();
 
-        verify(syncService).syncAll(100);
+        verify(syncService).syncAll(1, 100);
     }
 }
