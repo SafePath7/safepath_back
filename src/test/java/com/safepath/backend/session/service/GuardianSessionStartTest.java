@@ -3,15 +3,12 @@ package com.safepath.backend.session.service;
 import com.safepath.backend.session.exception.SessionChannelException;
 import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.session.store.ActiveSessionStore;
-import com.safepath.backend.session.store.LatestLocationStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
 import com.safepath.backend.session.store.SessionChannelStore;
 import com.safepath.backend.websocket.InMemoryChannelRegistry;
-import com.safepath.backend.websocket.dto.LocationUpdateRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -41,11 +38,10 @@ class GuardianSessionStartTest {
 	private final SelectedGuardianStore selected = spy(new SelectedGuardianStore(sessions));
 	private final SessionChannelStore mappings = spy(new SessionChannelStore());
 	private final InMemoryChannelRegistry channels = spy(new InMemoryChannelRegistry());
-	private final LatestLocationStore locations = spy(new LatestLocationStore(sessions));
 	private final GuardianPermissionService permissions = mock(GuardianPermissionService.class);
 	private final GuardianSelectionService selection = new GuardianSelectionService(sessions, selected, permissions);
 	private final SafeReturnSessionService service = new SafeReturnSessionService(
-			sessions, selected, mappings, channels, locations, selection);
+			sessions, selected, mappings, channels, selection);
 
 	@Test
 	void oneGuardianStartsWithMatchingSelectionChannelAndMapping() {
@@ -233,17 +229,15 @@ class GuardianSessionStartTest {
 	}
 
 	@Test
-	void endRemovesSelectionLocationChannelAndMapping() {
+	void endRemovesSelectionChannelAndMapping() {
 		allow(43L);
 		var session = service.startSession(42L, List.of(43L));
 		String channel = mappings.findBySessionId(session.id()).orElseThrow();
-		locations.updateLocation(session.id(), 42L, new LocationUpdateRequest(37, 127, null, Instant.now()));
 		service.endSession(session.id(), 42L);
 		assertTrue(sessions.findById(session.id()).isEmpty());
 		assertTrue(selected.findBySessionId(session.id()).isEmpty());
 		assertTrue(mappings.findBySessionId(session.id()).isEmpty());
 		assertFalse(channels.exists(channel));
-		verify(locations).remove(session.id());
 	}
 
 	private void allow(Long guardianId) {

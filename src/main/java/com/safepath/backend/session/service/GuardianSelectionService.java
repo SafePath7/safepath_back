@@ -1,6 +1,7 @@
 package com.safepath.backend.session.service;
 
 import com.safepath.backend.session.model.MonitoringPermissionType;
+import com.safepath.backend.session.exception.GuardianSelectionDeniedException;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
 import org.springframework.security.access.AccessDeniedException;
@@ -34,13 +35,13 @@ public class GuardianSelectionService {
 		for (Long guardianId : uniqueIds) {
 			validateGuardianId(guardianId);
 			if (ownerId.equals(guardianId)) {
-				throw new AccessDeniedException("Owner cannot be selected as guardian");
+				throw new GuardianSelectionDeniedException("Owner cannot be selected as guardian");
 			}
 		}
 		for (Long guardianId : uniqueIds) {
 			if (!permissionService.hasAcceptedRelationship(ownerId, guardianId)
 					|| !permissionService.hasPermission(ownerId, guardianId, MonitoringPermissionType.LOCATION)) {
-				throw new AccessDeniedException("Guardian selection denied");
+				throw new GuardianSelectionDeniedException("Guardian selection denied");
 			}
 		}
 		return Set.copyOf(uniqueIds);

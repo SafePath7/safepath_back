@@ -5,10 +5,8 @@ import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
 import com.safepath.backend.session.store.ActiveSessionStore.RemovalResult;
 import com.safepath.backend.session.store.SessionChannelStore;
-import com.safepath.backend.session.store.LatestLocationStore;
 import com.safepath.backend.session.exception.SessionChannelException;
 import com.safepath.backend.websocket.InMemoryChannelRegistry;
-import com.safepath.backend.websocket.dto.LocationUpdateRequest;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -25,17 +23,15 @@ public class SafeReturnSessionService {
 	private final SelectedGuardianStore selectedGuardianStore;
 	private final SessionChannelStore sessionChannelStore;
 	private final InMemoryChannelRegistry channelRegistry;
-	private final LatestLocationStore latestLocationStore;
 	private final GuardianSelectionService guardianSelectionService;
 
 	public SafeReturnSessionService(ActiveSessionStore activeSessionStore, SelectedGuardianStore selectedGuardianStore,
 			SessionChannelStore sessionChannelStore, InMemoryChannelRegistry channelRegistry,
-			LatestLocationStore latestLocationStore, GuardianSelectionService guardianSelectionService) {
+			GuardianSelectionService guardianSelectionService) {
 		this.activeSessionStore = activeSessionStore;
 		this.selectedGuardianStore = selectedGuardianStore;
 		this.sessionChannelStore = sessionChannelStore;
 		this.channelRegistry = channelRegistry;
-		this.latestLocationStore = latestLocationStore;
 		this.guardianSelectionService = guardianSelectionService;
 	}
 
@@ -77,7 +73,6 @@ public class SafeReturnSessionService {
 				}
 				activeSessionStore.removeIfOwned(session.id(), userId);
 				selectedGuardianStore.remove(session.id());
-				latestLocationStore.remove(session.id());
 				throw new SessionChannelException("Session channel creation failed", failure);
 			}
 		}
@@ -123,7 +118,6 @@ public class SafeReturnSessionService {
 			switch (result) {
 				case REMOVED -> {
 					selectedGuardianStore.remove(sessionId);
-					latestLocationStore.remove(sessionId);
 				}
 				case NOT_FOUND -> throw new NoSuchElementException("Active session not found");
 				case NOT_OWNER -> throw new SecurityException("User is not the owner of this active session");
@@ -131,31 +125,4 @@ public class SafeReturnSessionService {
 		}
 	}
 
-	/** publisherId must be derived from the authenticated WebSocket session, not the location payload. */
-	public LocationUpdateRequest updateLocation(String channelId, Long publisherId, LocationUpdateRequest location) {
-		if (publisherId == null || publisherId <= 0) {
-			throw new IllegalArgumentException("Authenticated publisher is required");
-		}
-		synchronized (activeSessionStore) {
-			ActiveSession session = activeSessionStore.findByUserId(publisherId)
-					.orElseThrow(() -> new NoSuchElementException("Active session not found"));
-			return updateLocation(session.id(), channelId, publisherId, location);
-		}
-	}
-
-	public LocationUpdateRequest updateLocation(
-			UUID sessionId, String channelId, Long publisherId, LocationUpdateRequest location) {
-		if (channelId == null || channelId.isBlank()) {
-			throw new IllegalArgumentException("channelId must not be blank");
-		}
-		synchronized (activeSessionStore) {
-			getSessionStatus(sessionId, publisherId);
-			String mapped = sessionChannelStore.findBySessionId(sessionId)
-					.orElseThrow(() -> new NoSuchElementException("Session channel not found"));
-			if (!mapped.equals(channelId) || !channelRegistry.isLocationPublisher(channelId, publisherId)) {
-				throw new SecurityException("Channel is not owned by this active session");
-			}
-			return latestLocationStore.updateLocation(sessionId, publisherId, location);
-		}
-	}
 }

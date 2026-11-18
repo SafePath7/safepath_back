@@ -4,7 +4,6 @@ import com.safepath.backend.session.exception.SessionChannelException;
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
-import com.safepath.backend.session.store.LatestLocationStore;
 import com.safepath.backend.session.store.SessionChannelStore;
 import com.safepath.backend.websocket.InMemoryChannelRegistry;
 import org.junit.jupiter.api.Test;
@@ -36,7 +35,7 @@ class SessionChannelLifecycleTest {
 	private final SessionChannelStore mappings = spy(new SessionChannelStore());
 	private final InMemoryChannelRegistry channels = spy(new InMemoryChannelRegistry());
 	private final GuardianPermissionService permissions = org.mockito.Mockito.mock(GuardianPermissionService.class);
-	private final SafeReturnSessionService service = new SafeReturnSessionService(sessions, guardians, mappings, channels, new LatestLocationStore(sessions), new GuardianSelectionService(sessions, guardians, permissions));
+	private final SafeReturnSessionService service = new SafeReturnSessionService(sessions, guardians, mappings, channels, new GuardianSelectionService(sessions, guardians, permissions));
 
 	@Test
 	void startsGuardianChannelAndEndsItWithoutAffectingAnotherSession() {

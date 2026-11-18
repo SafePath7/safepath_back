@@ -4,10 +4,7 @@ import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
-import com.safepath.backend.session.store.LatestLocationStore;
 import com.safepath.backend.session.store.SessionChannelStore;
-import com.safepath.backend.websocket.dto.LocationUpdateRequest;
-import java.util.Optional;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
@@ -21,19 +18,16 @@ public class GuardianMonitoringService {
 	private final ActiveSessionStore activeSessionStore;
 	private final GuardianPermissionService guardianPermissionService;
 	private final SelectedGuardianStore selectedGuardianStore;
-	private final LatestLocationStore latestLocationStore;
 	private final SessionChannelStore sessionChannelStore;
 
 	public GuardianMonitoringService(
 			ActiveSessionStore activeSessionStore,
 			GuardianPermissionService guardianPermissionService,
 			SelectedGuardianStore selectedGuardianStore,
-			LatestLocationStore latestLocationStore,
 			SessionChannelStore sessionChannelStore) {
 		this.activeSessionStore = Objects.requireNonNull(activeSessionStore);
 		this.guardianPermissionService = Objects.requireNonNull(guardianPermissionService);
 		this.selectedGuardianStore = Objects.requireNonNull(selectedGuardianStore);
-		this.latestLocationStore = Objects.requireNonNull(latestLocationStore);
 		this.sessionChannelStore = Objects.requireNonNull(sessionChannelStore);
 	}
 
@@ -88,13 +82,6 @@ public class GuardianMonitoringService {
 
 	public ActiveSession getMonitoringStatus(UUID sessionId, Long guardianId) {
 		return validateMonitoringPermission(sessionId, guardianId, MonitoringPermissionType.STATUS);
-	}
-
-	public Optional<LocationUpdateRequest> getMonitoredLocation(UUID sessionId, Long guardianId) {
-		synchronized (activeSessionStore) {
-			validateMonitoringPermission(sessionId, guardianId, MonitoringPermissionType.LOCATION);
-			return latestLocationStore.findBySessionId(sessionId);
-		}
 	}
 
 	/** guardianId must be resolved server-side from the authenticated Firebase principal. */

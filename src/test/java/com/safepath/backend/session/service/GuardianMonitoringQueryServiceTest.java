@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -96,17 +95,6 @@ class GuardianMonitoringQueryServiceTest {
 	}
 
 	@Test
-	void locationQueryUsesVerifiedIdentityAndPreservesMissingLocation() throws Exception {
-		when(monitoring.getMonitoredLocation(sessionId, 43L)).thenReturn(Optional.empty());
-		filter.doFilter(authenticatedRequest(), new MockHttpServletResponse(), (incoming, outgoing) -> {
-			assertTrue(queries.getMonitoredLocation(sessionId,
-					SecurityContextHolder.getContext().getAuthentication()).isEmpty());
-		});
-		verify(monitoring).getMonitoredLocation(sessionId, 43L);
-		verifyNoMoreInteractions(monitoring);
-	}
-
-	@Test
 	void absentUnverifiedAnonymousOrNonFirebasePrincipalCannotReachLookup() {
 		assertThrows(BadCredentialsException.class, () -> queries.getMonitoringStatus(sessionId, null));
 		assertThrows(BadCredentialsException.class, () -> queries.getMonitoringStatus(sessionId,
@@ -115,7 +103,7 @@ class GuardianMonitoringQueryServiceTest {
 				new AnonymousAuthenticationToken("key", "anonymousUser", AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS"))));
 		assertThrows(BadCredentialsException.class, () -> queries.getMonitoringStatus(sessionId,
 				UsernamePasswordAuthenticationToken.authenticated(43L, null, List.of())));
-		assertThrows(BadCredentialsException.class, () -> queries.getMonitoredLocation(sessionId,
+		assertThrows(BadCredentialsException.class, () -> queries.getMonitoringStatus(sessionId,
 				UsernamePasswordAuthenticationToken.authenticated(" ", null, List.of())));
 		verifyNoInteractions(users, monitoring);
 	}
@@ -138,7 +126,7 @@ class GuardianMonitoringQueryServiceTest {
 		when(users.findUserIdByFirebaseUid("verified-uid")).thenThrow(failure);
 		filter.doFilter(request, new MockHttpServletResponse(), (incoming, outgoing) -> {
 			assertSame(failure, assertThrows(DataAccessResourceFailureException.class,
-					() -> queries.getMonitoredLocation(sessionId, SecurityContextHolder.getContext().getAuthentication())));
+					() -> queries.getMonitoringStatus(sessionId, SecurityContextHolder.getContext().getAuthentication())));
 		});
 		verifyNoInteractions(monitoring);
 	}

@@ -3,7 +3,6 @@ package com.safepath.backend.session.service;
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
-import com.safepath.backend.session.store.LatestLocationStore;
 import com.safepath.backend.session.store.SessionChannelStore;
 import com.safepath.backend.websocket.InMemoryChannelRegistry;
 import java.util.Set;
@@ -39,7 +38,7 @@ class SafeReturnSessionServiceTest {
 		store = new ActiveSessionStore();
 		selectedGuardianStore = new SelectedGuardianStore(store);
 		permissions = org.mockito.Mockito.mock(GuardianPermissionService.class);
-		service = new SafeReturnSessionService(store, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new LatestLocationStore(store), new GuardianSelectionService(store, selectedGuardianStore, permissions));
+		service = new SafeReturnSessionService(store, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new GuardianSelectionService(store, selectedGuardianStore, permissions));
 	}
 
 	@Test

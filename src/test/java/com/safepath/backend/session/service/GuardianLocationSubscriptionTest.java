@@ -7,7 +7,6 @@ import com.safepath.backend.guardian.service.GuardianRegistrationService;
 import com.safepath.backend.guardian.service.GuardianRequestNotifier;
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.store.ActiveSessionStore;
-import com.safepath.backend.session.store.LatestLocationStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
 import com.safepath.backend.session.store.SessionChannelStore;
 import com.safepath.backend.websocket.InMemoryChannelRegistry;
@@ -42,15 +41,14 @@ class GuardianLocationSubscriptionTest {
 	private final ActiveSessionStore sessions = new ActiveSessionStore();
 	private final SelectedGuardianStore selected = new SelectedGuardianStore(sessions);
 	private final SessionChannelStore mappings = spy(new SessionChannelStore());
-	private final LatestLocationStore locations = new LatestLocationStore(sessions);
 	private final InMemoryChannelRegistry channels = new InMemoryChannelRegistry();
 	private final GuardianRegistrationRepository repository = mock(GuardianRegistrationRepository.class);
 	private final GuardianPermissionService permissions = new GuardianPermissionAdapterService(
 			new GuardianRegistrationService(repository, mock(GuardianRequestNotifier.class)));
 	private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(
-			sessions, selected, mappings, channels, locations, new GuardianSelectionService(sessions, selected, permissions));
+			sessions, selected, mappings, channels, new GuardianSelectionService(sessions, selected, permissions));
 	private final GuardianMonitoringService monitoring = new GuardianMonitoringService(
-			sessions, permissions, selected, locations, mappings);
+			sessions, permissions, selected, mappings);
 	private final GuardianRegistration registration = BeanUtils.instantiateClass(GuardianRegistration.class);
 	private ActiveSession session;
 	private String channelId;

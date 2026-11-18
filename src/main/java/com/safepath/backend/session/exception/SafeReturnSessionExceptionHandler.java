@@ -31,6 +31,11 @@ public class SafeReturnSessionExceptionHandler {
 		return error(HttpStatus.FORBIDDEN, "USER_NOT_REGISTERED", "A registered user account is required.");
 	}
 
+	@ExceptionHandler(GuardianSelectionDeniedException.class)
+	public ResponseEntity<SessionApiErrorResponse> handleGuardianSelectionDenied(GuardianSelectionDeniedException exception) {
+		return error(HttpStatus.FORBIDDEN, "GUARDIAN_SELECTION_DENIED", "Check the selected guardians and their location permissions.");
+	}
+
 	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
 	public ResponseEntity<SessionApiErrorResponse> handleInvalidPathParameter(
 			MethodArgumentTypeMismatchException exception) {

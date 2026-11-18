@@ -7,7 +7,6 @@ import com.safepath.backend.session.exception.SafeReturnSessionExceptionHandler;
 import com.safepath.backend.session.service.SafeReturnSessionService;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
-import com.safepath.backend.session.store.LatestLocationStore;
 import com.safepath.backend.session.store.SessionChannelStore;
 import com.safepath.backend.websocket.InMemoryChannelRegistry;
 import com.safepath.backend.user.UserService;
@@ -256,33 +255,37 @@ class SafeReturnSessionControllerTest {
 	void rejectsUnauthorizedGuardianAndSelfSelectionWithoutCreatingResources() throws Exception {
 		for (String body : java.util.List.of("{\"guardianIds\":[2,999]}", "{\"guardianIds\":[42]}")) {
 			mockMvc.perform(post("/api/safe-return/sessions").header("Authorization", bearer(USER_1_TOKEN))
-					.contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+					.contentType(MediaType.APPLICATION_JSON).content(body))
+					.andExpect(status().isForbidden())
+					.andExpect(jsonPath("$.code").value("GUARDIAN_SELECTION_DENIED"))
+					.andExpect(jsonPath("$.message").value("Check the selected guardians and their location permissions."));
 		}
 		assertTrue(context.getBean(ActiveSessionStore.class).findByUserId(42L).isEmpty());
 	}
 
 	@Test
-	void selectedGuardiansReadStatusAndLocationAndCannotReadAfterEnd() throws Exception {
+	void rejectsAcceptedGuardianWithoutLocationPermissionWithSelectionError() throws Exception {
+		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
+		when(permissions.hasPermission(42L, 2L,
+				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(false);
+		mockMvc.perform(post("/api/safe-return/sessions").header("Authorization", bearer(USER_1_TOKEN))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"guardianIds\":[2]}"))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.code").value("GUARDIAN_SELECTION_DENIED"));
+		assertTrue(context.getBean(ActiveSessionStore.class).findByUserId(42L).isEmpty());
+	}
+
+	@Test
+	void selectedGuardiansReadStatusAndCannotReadAfterEnd() throws Exception {
 		UUID sessionId = startSession(USER_1_TOKEN);
 		String base = "/api/guardian/monitoring/sessions/" + sessionId;
-		mockMvc.perform(get(base + "/location").header("Authorization", bearer("guardian-2")))
-				.andExpect(status().isNoContent()).andExpect(content().string(""));
-		String channelId = context.getBean(SessionChannelStore.class).findBySessionId(sessionId).orElseThrow();
-		context.getBean(SafeReturnSessionService.class).updateLocation(channelId, 42L,
-				new com.safepath.backend.websocket.dto.LocationUpdateRequest(37.5, 127.0, 3.0,
-						java.time.Instant.parse("2026-11-15T09:00:00Z")));
 		for (String token : java.util.List.of("guardian-2", "guardian-3")) {
 			mockMvc.perform(get(base + "/status").header("Authorization", bearer(token)))
 					.andExpect(status().isOk()).andExpect(jsonPath("$.id").value(sessionId.toString()))
 					.andExpect(jsonPath("$.channelId").doesNotExist());
-			mockMvc.perform(get(base + "/location").header("Authorization", bearer(token)))
-					.andExpect(status().isOk()).andExpect(jsonPath("$.latitude").value(37.5))
-					.andExpect(jsonPath("$.longitude").value(127.0))
-					.andExpect(jsonPath("$.accuracyMeters").value(3.0))
-					.andExpect(jsonPath("$.capturedAt").value("2026-11-15T09:00:00Z"));
 		}
 		context.getBean(SafeReturnSessionService.class).endSession(sessionId, 42L);
-		for (String suffix : java.util.List.of("/status", "/location")) {
+		for (String suffix : java.util.List.of("/status")) {
 			mockMvc.perform(get(base + suffix).header("Authorization", bearer("guardian-2")))
 					.andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("SESSION_NOT_FOUND"));
 		}
@@ -300,7 +303,7 @@ class SafeReturnSessionControllerTest {
 				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(true);
 		when(permissions.hasPermission(42L, 2L,
 				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(false);
-		mockMvc.perform(get(base + "/location").header("Authorization", bearer("guardian-2")))
+		mockMvc.perform(get(base + "/channel").header("Authorization", bearer("guardian-2")))
 				.andExpect(status().isForbidden());
 		mockMvc.perform(get(base + "/status").header("Authorization", bearer("guardian-2")))
 				.andExpect(status().isOk());
@@ -308,9 +311,9 @@ class SafeReturnSessionControllerTest {
 				com.safepath.backend.session.model.MonitoringPermissionType.STATUS)).thenReturn(false);
 		mockMvc.perform(get(base + "/status").header("Authorization", bearer("guardian-3")))
 				.andExpect(status().isForbidden());
-		mockMvc.perform(get(base + "/location").header("Authorization", bearer("guardian-3")))
-				.andExpect(status().isNoContent());
-		for (String suffix : java.util.List.of("/status", "/location")) {
+		mockMvc.perform(get(base + "/channel").header("Authorization", bearer("guardian-3")))
+				.andExpect(status().isOk());
+		for (String suffix : java.util.List.of("/status", "/channel")) {
 			mockMvc.perform(get(base + suffix)).andExpect(status().isUnauthorized());
 			mockMvc.perform(get(base + suffix).header("Authorization", bearer(USER_1_TOKEN)))
 					.andExpect(status().isForbidden());
@@ -473,7 +476,6 @@ class SafeReturnSessionControllerTest {
 			SafeReturnSessionExceptionHandler.class,
 			ActiveSessionStore.class,
 			SelectedGuardianStore.class,
-			LatestLocationStore.class,
 			SafeReturnSessionService.class,
 			com.safepath.backend.session.service.GuardianSelectionService.class
 	})
