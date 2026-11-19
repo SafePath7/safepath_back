@@ -1,0 +1,3 @@
+ALTER TABLE safety_facilities
+    ADD COLUMN IF NOT EXISTS source VARCHAR(30),
+    ADD COLUMN IF NOT EXISTS external_id VARCHAR(255);
