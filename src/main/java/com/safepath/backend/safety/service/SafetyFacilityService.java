@@ -50,6 +50,17 @@ public class SafetyFacilityService {
         return new SafetyFacilityMapResponse("CLUSTER", totalCount, clusters, List.of());
     }
 
+    @Transactional(readOnly = true)
+    public List<SafetyFacilityResponse> findFacilitiesInBounds(
+            double southWestLat, double northEastLat, double southWestLng, double northEastLng) {
+        if (southWestLat > northEastLat || southWestLng > northEastLng) {
+            throw new ResponseStatusException(BAD_REQUEST, "Map bounds must be ordered south-west to north-east");
+        }
+        return facilities.findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(
+                southWestLat, northEastLat, southWestLng, northEastLng)
+                .stream().map(SafetyFacilityResponse::from).toList();
+    }
+
     private double gridSizeFor(int zoom) {
         return MAX_LEVEL_GRID_SIZE / Math.pow(2, MAX_KAKAO_MAP_LEVEL - zoom);
     }

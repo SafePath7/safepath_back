@@ -1,21 +1,21 @@
 package com.safepath.backend.route.score;
 
 import com.safepath.backend.route.dto.RouteRequest.Coordinate;
-import com.safepath.backend.safety.entity.SafetyFacility;
+import com.safepath.backend.safety.dto.SafetyFacilityResponse;
 import java.util.*;
 
 public class FacilitySafetyFactor implements SafetyFactor {
-    private final List<SafetyFacility> facilities;
+    private final List<SafetyFacilityResponse> facilities;
     private final ScorePolicy policy;
-    public FacilitySafetyFactor(List<SafetyFacility> facilities, ScorePolicy policy) { this.facilities=facilities; this.policy=policy; }
+    public FacilitySafetyFactor(List<SafetyFacilityResponse> facilities, ScorePolicy policy) { this.facilities=facilities; this.policy=policy; }
     @Override public FactorResult evaluate(List<Coordinate> segments) {
         double[] evidence = new double[segments.size()];
         Map<String,Integer> counts = new TreeMap<>();
         Set<Long> seen = new HashSet<>();
-        for (SafetyFacility facility : facilities) {
-            double weight = policy.weight(facility.getFacilityType());
-            if (weight <= 0 || !seen.add(facility.getId())) continue;
-            Coordinate point = new Coordinate(facility.getLatitude(), facility.getLongitude());
+        for (SafetyFacilityResponse facility : facilities) {
+            double weight = policy.weight(facility.facilityType());
+            if (weight <= 0 || !seen.add(facility.id())) continue;
+            Coordinate point = new Coordinate(facility.latitude(), facility.longitude());
             int nearest = -1; double min = policy.radiusMeters;
             for (int i=0; i<segments.size(); i++) {
                 double distance = distance(point, segments.get(i));
@@ -23,7 +23,7 @@ public class FacilitySafetyFactor implements SafetyFactor {
             }
             if (nearest >= 0) {
                 evidence[nearest] += weight * (1 - min / policy.radiusMeters);
-                counts.merge(facility.getFacilityType(), 1, Integer::sum);
+                counts.merge(facility.facilityType(), 1, Integer::sum);
             }
         }
         return new FactorResult(evidence, Map.copyOf(counts));

@@ -26,10 +26,38 @@ public class MapboxRouteClient {
     }
     public List<RouteCandidate> find(RouteRequest request) {
         if (token.isBlank()) throw error(HttpStatus.SERVICE_UNAVAILABLE, "ROUTING_NOT_CONFIGURED", "Mapbox ??? ???? ?????.");
+        List<RouteCandidate> candidates = new ArrayList<>();
+        mergeCandidates(candidates, fetch(request, null));
+        if (candidates.size() < 6) {
+            for (String bias : List.of("1", "-1", "0.5", "-0.5")) {
+                if (candidates.size() >= 6) break;
+                try {
+                    mergeCandidates(candidates, fetch(request, bias));
+                } catch (ApiException e) {
+                    if (Thread.currentThread().isInterrupted()) throw e;
+                    // A successful primary route remains usable when an optional request fails.
+                }
+            }
+        }
+        return candidates.stream().sorted(java.util.Comparator.comparingDouble(RouteCandidate::distanceMeters))
+                .limit(6).toList();
+    }
+
+    static void mergeCandidates(List<RouteCandidate> candidates, List<RouteCandidate> additional) {
+        for (RouteCandidate candidate : additional) {
+            if (candidates.stream().noneMatch(existing -> existing.coordinates().equals(candidate.coordinates()))) {
+                candidates.add(candidate);
+            }
+        }
+    }
+
+    private List<RouteCandidate> fetch(RouteRequest request, String bias) {
         Coordinate a = request.origin(), b = request.destination();
         String url = "https://api.mapbox.com/directions/v5/mapbox/walking/" + a.longitude() + "," + a.latitude()
                 + ";" + b.longitude() + "," + b.latitude()
-                + "?alternatives=true&geometries=geojson&overview=full&access_token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
+                + "?alternatives=true&geometries=geojson&overview=full"
+                + (bias == null ? "" : "&walkway_bias=" + bias)
+                + "&access_token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
         try {
             HttpRequest http = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build();
             HttpResponse<String> response = client.send(http, HttpResponse.BodyHandlers.ofString());
