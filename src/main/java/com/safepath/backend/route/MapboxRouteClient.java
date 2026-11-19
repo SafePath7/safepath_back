@@ -21,6 +21,7 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 public class MapboxRouteClient {
     private static final Logger log = LoggerFactory.getLogger(MapboxRouteClient.class);
+    private static final int MAX_CANDIDATES = 10;
     private final String token;
     private final ObjectMapper mapper;
     private final HttpClient client;
@@ -37,9 +38,9 @@ public class MapboxRouteClient {
         List<RouteCandidate> primary = fetch(request, null);
         mergeCandidates(candidates, primary);
         log.info("Mapbox walking primary completed: returned={}, unique={}", primary.size(), candidates.size());
-        if (candidates.size() < 6) {
+        if (candidates.size() < MAX_CANDIDATES) {
             for (String bias : List.of("1", "-1", "0.5", "-0.5")) {
-                if (candidates.size() >= 6) break;
+                if (candidates.size() >= MAX_CANDIDATES) break;
                 try {
                     List<RouteCandidate> additional = fetch(request, bias);
                     int before = candidates.size();
@@ -58,6 +59,7 @@ public class MapboxRouteClient {
 
     static void mergeCandidates(List<RouteCandidate> candidates, List<RouteCandidate> additional) {
         for (RouteCandidate candidate : additional) {
+            if (candidates.size() >= MAX_CANDIDATES) break;
             if (candidates.stream().noneMatch(existing -> existing.coordinates().equals(candidate.coordinates()))) {
                 candidates.add(candidate);
             }

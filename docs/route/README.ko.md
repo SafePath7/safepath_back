@@ -100,7 +100,7 @@ Content-Type: application/json
 
 ## 경로 선정과 점수
 
-1. `MapboxRouteClient.find`는 `mapbox/walking`, `alternatives=true`, 전체 GeoJSON 경로를 요청합니다. 후보가 6개 미만이면 보행로 선호도 1, -1, 0.5, -0.5 순으로 최대 4회 추가 요청합니다. 좌표 배열이 정확히 같은 결과를 중복 제거하며, 6개 이상 확보하면 추가 요청을 중단합니다. 마지막 요청에서 후보가 추가되면 6개를 초과할 수 있습니다.
+1. `MapboxRouteClient.find`는 `mapbox/walking`, `alternatives=true`, 전체 GeoJSON 경로를 요청합니다. 후보가 10개 미만이면 보행로 선호도 1, -1, 0.5, -0.5 순으로 최대 4회 추가 요청합니다. 좌표 배열이 정확히 같은 결과를 중복 제거하고, 먼저 확보한 후보부터 최대 10개를 유지합니다. 10개를 확보하면 추가 요청을 중단합니다.
 2. `RouteService.recommend`는 확보한 후보 전체를 평가합니다. 따라서 아래의 최상위 경로들은 **평가 대상 후보 중** 선택한 결과이며 도로망 전체의 최적 경로가 아닙니다.
 3. 기존 `SafetyFacilityService.findFacilitiesInBounds`로 후보를 감싸는 사각 영역의 시설을 한 번 조회합니다. 현재 PostGIS는 사용하지 않습니다.
 4. `RouteScorer`는 경로를 기본 100m 단위로 나누고, `FacilitySafetyFactor`는 각 시설을 반경 80m 내 가장 가까운 구간 대표점 하나에만 배정합니다. 중복 시설 ID는 한 번만 반영합니다.

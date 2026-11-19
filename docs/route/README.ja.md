@@ -100,7 +100,7 @@ Content-Type: application/json
 
 ## 経路選択とスコア
 
-1. `MapboxRouteClient.find` は `mapbox/walking`、`alternatives=true`、全体の GeoJSON 経路を要求します。候補が 6 件未満なら歩道優先度 1、-1、0.5、-0.5 の順で最大 4 回追加要求します。座標配列の完全一致を重複排除し、6 件以上確保すると追加要求を停止します。最後の要求で候補が増えると 6 件を超える場合があります。
+1. `MapboxRouteClient.find` は `mapbox/walking`、`alternatives=true`、全体の GeoJSON 経路を要求します。候補が 10 件未満なら歩道優先度 1、-1、0.5、-0.5 の順で最大 4 回追加要求します。座標配列の完全一致を重複排除し、取得順に最大 10 件を保持します。10 件を確保すると追加要求を停止します。
 2. `RouteService.recommend` は取得した候補をすべて評価します。以下の選択は**評価対象の候補内**の結果であり、道路網全体の最適経路ではありません。
 3. 既存の `SafetyFacilityService.findFacilitiesInBounds` を使い、候補を囲む矩形内の施設を一度取得します。現在 PostGIS は使用していません。
 4. `RouteScorer` が経路を既定の 100m ごとに分割し、`FacilitySafetyFactor` が各施設を半径 80m 内で最も近い 1 区間の代表点に割り当てます。同一施設 ID は一度だけ反映します。
