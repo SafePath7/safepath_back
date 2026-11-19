@@ -87,7 +87,7 @@ Content-Type: application/json
 
 | フィールド | 意味 |
 | --- | --- |
-| `candidateCount` | Mapbox の結果から座標配列が完全一致する経路をまとめ、距離順で最大 6 件に制限した候補数。評価するのはさらに短い最大 3 件です。 |
+ㅎ| `candidateCount` | Mapbox から取得した経路のうち座標配列が完全一致する経路を重複排除した候補数。取得した候補をすべて評価します。 |
 | `type` | `RECOMMENDED`、`SAFEST`、`FASTEST` の順に 3 件を返します。 |
 | `coordinates` | 地図上で順に結ぶ緯度・経度オブジェクトの配列。道路網に合わせた開始・終了座標は入力座標と異なる場合があります。 |
 | `distanceMeters`, `durationSeconds` | Mapbox が返した距離（m）と予想時間（秒）。 |
@@ -100,12 +100,12 @@ Content-Type: application/json
 
 ## 経路選択とスコア
 
-1. `MapboxRouteClient.find` は `mapbox/walking`、`alternatives=true`、全体の GeoJSON 経路を要求します。候補が 6 件未満なら歩道優先度 1、-1、0.5、-0.5 の順で最大 4 回追加要求し、座標配列の完全一致のみを重複排除して距離順で最大 6 件を残します。
-2. `RouteService.recommend` は短い最大 3 件を評価します。以下の選択は**評価対象の候補内**の結果であり、道路網全体の最適経路ではありません。
+1. `MapboxRouteClient.find` は `mapbox/walking`、`alternatives=true`、全体の GeoJSON 経路を要求します。候補が 6 件未満なら歩道優先度 1、-1、0.5、-0.5 の順で最大 4 回追加要求します。座標配列の完全一致を重複排除し、6 件以上確保すると追加要求を停止します。最後の要求で候補が増えると 6 件を超える場合があります。
+2. `RouteService.recommend` は取得した候補をすべて評価します。以下の選択は**評価対象の候補内**の結果であり、道路網全体の最適経路ではありません。
 3. 既存の `SafetyFacilityService.findFacilitiesInBounds` を使い、候補を囲む矩形内の施設を一度取得します。現在 PostGIS は使用していません。
 4. `RouteScorer` が経路を既定の 100m ごとに分割し、`FacilitySafetyFactor` が各施設を半径 80m 内で最も近い 1 区間の代表点に割り当てます。同一施設 ID は一度だけ反映します。
-5. 施設の寄与は `重み × (1 - 代表点までの距離 / 半径)`。区間スコアは `100 × (1 - exp(-寄与の合計))` です。寄与が 0 より大きい区間のみ平均と最小値に含め、全体は既定で `平均 × 0.8 + 最小値 × 0.2` です。最後の短い区間も同じ 1 区間として数えます。
-6. `FASTEST` は評価対象で予想時間が最短の経路です。`SAFEST` は観測された施設スコアが最大の経路で、時間・距離による減点はありません。すべて `null` の場合は最短距離候補を代わりに返します。`RECOMMENDED` は `安全スコア - 0.5 × (当該時間 - 最短時間) / 60` が最大の経路です。スコア `null` は**順位比較時のみ** 50 とし、レスポンスは `null` のままです。
+5. 施設の寄与は `重み × (1 - 代表点までの距離 / 半径)²`。区間スコアは `100 × (1 - exp(-寄与の合計))` です。寄与が 0 より大きい区間のみ平均と最小値に含め、全体は既定で `平均 × 0.8 + 最小値 × 0.2` です。最後の短い区間も同じ 1 区間として数えます。
+6. `FASTEST` は評価対象で予想時間が最短の経路です。`SAFEST` は観測された施設スコアが最大の経路で、時間・距離による減点はありません。すべて `null` の場合は最短距離候補を代わりに返します。`RECOMMENDED` は `安全スコア - 1.0 × (当該時間 - 最短時間) / 60` が最大の経路です。スコア `null` は**順位比較時のみ** 50 とし、レスポンスは `null` のままです。
 
 区間代表点を用いるため、実際の経路線までの最短距離とは異なる場合があります。複数タイプが重なっても、異なる経路を捏造しません。
 
@@ -113,7 +113,7 @@ Content-Type: application/json
 
 施設の種類と既定の重みは [FacilityScore](../../src/main/java/com/safepath/backend/route/score/FacilityScore.java) で管理します。既定値は CCTV 1、SECURITY_LIGHT 1、POLICE 2、EMERGENCY_CALL_BOX 1.5、SAFETY_GUARDIAN_STORE 1 です。DB の `facility_type` は enum 名と一致する必要があり、未知の種類は採点から除外します。
 
-`safepath.route.score` 配下の設定で既定値を上書きできます。例: `safepath.route.score.cctv=2`、`safepath.route.score.duration-weight=1.0`。施設の設定キーは `cctv`、`light`、`police`、`emergency-call-box`、`safety-guardian-store` です。`segment-meters` の既定値は 100、`radius-meters` は 80、`weakest-weight` は 0.2、`duration-weight` は 0.5 です。値は暫定方針で、変更後は再起動が必要です。
+`safepath.route.score` 配下の設定で既定値を上書きできます。例: `safepath.route.score.cctv=2`、`safepath.route.score.duration-weight=1.0`。施設の設定キーは `cctv`、`light`、`police`、`emergency-call-box`、`safety-guardian-store` です。`segment-meters` の既定値は 100、`radius-meters` は 80、`weakest-weight` は 0.2、`duration-weight` は 1.0 です。値は暫定方針で、変更後は再起動が必要です。
 
 `SafetyFactor` は区間ごとの寄与を計算する拡張ポイントです。現在サービスに接続されているのは施設戦略のみで、危険イベントや SOS の追加には実データへのアクセス、戦略実装、サービスへの接続が必要です。`ScorePolicy` の `distance-weight`、`safest-distance-weight`、`safest-duration-weight` は現在の経路選択では使用されていません。
 
