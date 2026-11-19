@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -18,24 +20,36 @@ import tools.jackson.databind.ObjectMapper;
 
 @Component
 public class MapboxRouteClient {
+    private static final Logger log = LoggerFactory.getLogger(MapboxRouteClient.class);
     private final String token;
     private final ObjectMapper mapper;
-    private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    private final HttpClient client;
+    @org.springframework.beans.factory.annotation.Autowired
     public MapboxRouteClient(@Value("${MAPBOX_ACCESS_TOKEN:}") String token, ObjectMapper mapper) {
-        this.token = token; this.mapper = mapper;
+        this(token, mapper, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
+    }
+    MapboxRouteClient(String token, ObjectMapper mapper, HttpClient client) {
+        this.token = token; this.mapper = mapper; this.client = client;
     }
     public List<RouteCandidate> find(RouteRequest request) {
         if (token.isBlank()) throw error(HttpStatus.SERVICE_UNAVAILABLE, "ROUTING_NOT_CONFIGURED", "Mapbox ??? ???? ?????.");
         List<RouteCandidate> candidates = new ArrayList<>();
-        mergeCandidates(candidates, fetch(request, null));
+        List<RouteCandidate> primary = fetch(request, null);
+        mergeCandidates(candidates, primary);
+        log.info("Mapbox walking primary completed: returned={}, unique={}", primary.size(), candidates.size());
         if (candidates.size() < 6) {
             for (String bias : List.of("1", "-1", "0.5", "-0.5")) {
                 if (candidates.size() >= 6) break;
                 try {
-                    mergeCandidates(candidates, fetch(request, bias));
+                    List<RouteCandidate> additional = fetch(request, bias);
+                    int before = candidates.size();
+                    mergeCandidates(candidates, additional);
+                    log.info("Mapbox walking alternative completed: bias={}, returned={}, added={}, unique={}",
+                            bias, additional.size(), candidates.size() - before, candidates.size());
                 } catch (ApiException e) {
                     if (Thread.currentThread().isInterrupted()) throw e;
-                    // A successful primary route remains usable when an optional request fails.
+                    log.warn("Mapbox walking alternative failed: bias={}, code={}, status={}",
+                            bias, e.code(), e.status().value());
                 }
             }
         }
@@ -61,7 +75,10 @@ public class MapboxRouteClient {
         try {
             HttpRequest http = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build();
             HttpResponse<String> response = client.send(http, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) throw error(HttpStatus.BAD_GATEWAY, "ROUTING_PROVIDER_ERROR", "?? ?? ??? ??? ??????.");
+            if (response.statusCode() != 200) {
+                log.warn("Mapbox walking provider HTTP error: status={}", response.statusCode());
+                throw error(HttpStatus.BAD_GATEWAY, "ROUTING_PROVIDER_ERROR", "?? ?? ??? ??? ??????.");
+            }
             JsonNode root = mapper.readTree(response.body());
             if (!"Ok".equals(root.path("code").asText())) throw error(HttpStatus.UNPROCESSABLE_ENTITY, "ROUTE_NOT_FOUND", "?? ??? ?? ? ????.");
             List<RouteCandidate> result = new ArrayList<>();
