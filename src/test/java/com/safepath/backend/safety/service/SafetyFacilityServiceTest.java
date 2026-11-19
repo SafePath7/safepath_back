@@ -53,6 +53,20 @@ class SafetyFacilityServiceTest {
     }
 
     @Test
+    void returnsIndividualFacilitiesForRouteEvaluation() {
+        SafetyFacility facility = facility(1L);
+        when(facilities.findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(37.0, 38.0, 126.0, 127.0))
+                .thenReturn(List.of(facility));
+
+        var result = service.findFacilitiesInBounds(37.0, 38.0, 126.0, 127.0);
+
+        assertEquals(1, result.size());
+        assertEquals(1L, result.getFirst().id());
+        assertEquals("SHELTER", result.getFirst().facilityType());
+        verify(facilities).findByLatitudeBetweenAndLongitudeBetweenOrderByIdAsc(37.0, 38.0, 126.0, 127.0);
+    }
+
+    @Test
     void rejectsReversedBounds() {
         ResponseStatusException error = assertThrows(ResponseStatusException.class,
                 () -> service.findInBounds(3, 38.0, 126.0, 37.0, 127.0));
