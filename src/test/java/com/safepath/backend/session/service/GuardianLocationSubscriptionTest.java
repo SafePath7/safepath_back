@@ -81,6 +81,18 @@ class GuardianLocationSubscriptionTest {
 	}
 
 	@Test
+	void selectedGuardianCanLookUpChannelAfterPermissionAndRelationshipChange() {
+		registration.changePermissions(false, false, false);
+		assertEquals(channelId, monitoring.getGuardianChannelId(session.id(), 43L));
+		registration.changeStatus(RegistrationStatus.REVOKED);
+		assertEquals(channelId, monitoring.getGuardianChannelId(session.id(), 43L));
+		assertThrows(AccessDeniedException.class, () -> monitoring.getGuardianChannelId(session.id(), 44L));
+		assertThrows(AccessDeniedException.class, () -> monitoring.getMonitoringStatus(session.id(), 43L));
+		lifecycle.endSession(session.id(), 42L);
+		assertThrows(NoSuchElementException.class, () -> monitoring.getGuardianChannelId(session.id(), 43L));
+	}
+
+	@Test
 	void guardianChannelLookupRejectsAnotherAuthorizedSessionsChannel() {
 		when(repository.findByUserIdAndGuardianId(45L, 43L)).thenReturn(Optional.of(registration));
 		ActiveSession other = lifecycle.startSession(45L, List.of(43L));

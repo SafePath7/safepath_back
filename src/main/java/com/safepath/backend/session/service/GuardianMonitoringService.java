@@ -70,10 +70,15 @@ public class GuardianMonitoringService {
 			throw new IllegalArgumentException("Session and authenticated guardian are required");
 		}
 		synchronized (activeSessionStore) {
+			ActiveSession session = activeSessionStore.findById(sessionId)
+					.orElseThrow(() -> new NoSuchElementException("Active session not found"));
+			if (session.userId().equals(guardianId)
+					|| !selectedGuardianStore.isSelectedGuardian(sessionId, guardianId)) {
+				throw new AccessDeniedException("Monitoring access denied");
+			}
 			String channelId = sessionChannelStore.findBySessionId(sessionId)
 					.orElseThrow(() -> new NoSuchElementException("Session channel not found"));
-			ActiveSession session = validateGuardianLocationSubscription(channelId, guardianId);
-			if (!session.id().equals(sessionId)) {
+			if (sessionChannelStore.findSessionIdByChannelId(channelId).filter(sessionId::equals).isEmpty()) {
 				throw new AccessDeniedException("Session channel mapping does not match");
 			}
 			return channelId;

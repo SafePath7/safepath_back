@@ -304,7 +304,7 @@ class SafeReturnSessionControllerTest {
 		when(permissions.hasPermission(42L, 2L,
 				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(false);
 		mockMvc.perform(get(base + "/channel").header("Authorization", bearer("guardian-2")))
-				.andExpect(status().isForbidden());
+				.andExpect(status().isOk());
 		mockMvc.perform(get(base + "/status").header("Authorization", bearer("guardian-2")))
 				.andExpect(status().isOk());
 		when(permissions.hasPermission(42L, 3L,
@@ -350,22 +350,22 @@ class SafeReturnSessionControllerTest {
 	}
 
 	@Test
-	void channelLookupRejectsMissingOrUnacceptedRelationship() throws Exception {
+	void channelLookupKeepsSelectedGuardianAfterRelationshipRevocation() throws Exception {
 		UUID sessionId = startSession(USER_1_TOKEN);
 		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
 		when(permissions.hasAcceptedRelationship(42L, 2L)).thenReturn(false);
 		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
-				.andExpect(status().isForbidden());
+				.andExpect(status().isOk()).andExpect(jsonPath("$.channelId").isNotEmpty());
 	}
 
 	@Test
-	void statusPermissionCannotAuthorizeChannelLookup() throws Exception {
+	void channelLookupKeepsSelectedGuardianAfterLocationPermissionRevocation() throws Exception {
 		UUID sessionId = startSession(USER_1_TOKEN);
 		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
 		when(permissions.hasPermission(42L, 2L,
 				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(false);
 		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
-				.andExpect(status().isForbidden());
+				.andExpect(status().isOk()).andExpect(jsonPath("$.channelId").isNotEmpty());
 	}
 
 	@Test
@@ -429,15 +429,14 @@ class SafeReturnSessionControllerTest {
 	}
 
 	@Test
-	void channelPermissionLookupFailureDoesNotReturnChannelId() throws Exception {
+	void channelLookupDoesNotDependOnCurrentGuardianPermissionLookup() throws Exception {
 		UUID sessionId = startSession(USER_1_TOKEN);
 		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
 		when(permissions.hasPermission(42L, 2L,
 				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION))
 				.thenThrow(new org.springframework.dao.DataAccessResourceFailureException("Lookup unavailable"));
 		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
-				.andExpect(status().isInternalServerError()).andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
-				.andExpect(jsonPath("$.channelId").doesNotExist());
+				.andExpect(status().isOk()).andExpect(jsonPath("$.channelId").isNotEmpty());
 	}
 
 	@Test

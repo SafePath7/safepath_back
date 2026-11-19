@@ -53,7 +53,7 @@ class GuardianPermissionBeanTest {
 			assertEquals(session, monitoring.getMonitoringStatus(session.id(), 43L));
 			monitoring.getGuardianChannelId(session.id(), 43L);
 			registration.changePermissions(false, true, false);
-			assertThrows(AccessDeniedException.class, () -> monitoring.getGuardianChannelId(session.id(), 43L));
+			monitoring.getGuardianChannelId(session.id(), 43L);
 			registration.changeStatus(RegistrationStatus.REVOKED);
 			assertThrows(AccessDeniedException.class, () -> monitoring.getMonitoringStatus(session.id(), 43L));
 		}
