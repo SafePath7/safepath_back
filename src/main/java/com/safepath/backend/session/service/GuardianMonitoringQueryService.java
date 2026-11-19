@@ -1,6 +1,7 @@
 package com.safepath.backend.session.service;
 
 import com.safepath.backend.session.model.ActiveSession;
+import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.user.UserService;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -24,6 +25,10 @@ public class GuardianMonitoringQueryService {
 
 	public ActiveSession getMonitoringStatus(UUID sessionId, Authentication authentication) {
 		return monitoringService.getMonitoringStatus(sessionId, authenticatedGuardianId(authentication));
+	}
+
+	public ActiveSession getMonitoringRoute(UUID sessionId, Authentication authentication) {
+		return monitoringService.validateMonitoringPermission(sessionId, authenticatedGuardianId(authentication), MonitoringPermissionType.LOCATION);
 	}
 
 	public String getChannelId(UUID sessionId, Authentication authentication) {

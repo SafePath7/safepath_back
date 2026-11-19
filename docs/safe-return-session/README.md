@@ -1,5 +1,29 @@
 # 안전귀가 활성 세션 저장소
 
+## 선택 경로 연동
+
+경로 추천 `POST /api/routes` 응답에서 선택한 경로를 세션 시작 요청의 `selectedRoute`로 전달할 수 있습니다. 기존 `guardianIds` 검증은 그대로이며, 기존 클라이언트와의 호환을 위해 `selectedRoute`는 선택 사항입니다.
+
+```json
+{
+  "guardianIds": [2, 3],
+  "selectedRoute": {
+    "type": "SAFEST",
+    "coordinates": [
+      { "latitude": 35.8564, "longitude": 128.4938 },
+      { "latitude": 35.865, "longitude": 128.505 }
+    ],
+    "distanceMeters": 1800,
+    "durationSeconds": 1200,
+    "safetyScore": 65
+  }
+}
+```
+
+소유자의 `GET /api/safe-return/sessions/{sessionId}/status`는 `selectedRoute`를 함께 반환합니다. 선택된 보호자는 `GET /api/guardian/monitoring/sessions/{sessionId}/route`로 조회하며, 기존 인증과 수락 관계, 선택 보호자 여부 및 현재 LOCATION 권한을 검사합니다. 경로가 없는 세션은 보호자 경로 조회에서 204를 반환합니다. 상태 조회에는 경로를 포함하지 않습니다.
+
+경로는 프런트가 보낸 값이며 서버가 추천 결과와 일치하는지 검증하지 않습니다. 좌표 범위, 좌표 수, 유형 및 거리·시간·점수 범위는 검증합니다. 세션과 같이 메모리에만 유지되므로 종료 또는 서버 재시작 시 사라지고 서버 인스턴스 간 공유되지 않습니다. 경로의 중간 변경은 지원하지 않습니다.
+
 ## 목적 및 범위
 
 `ActiveSessionStore`는 일반적인 활성 안전귀가 세션을 애플리케이션 프로세스의 메모리에 보관합니다. 저장소 자체는 데이터베이스를 사용하거나 HTTP 엔드포인트를 구현하지 않습니다.

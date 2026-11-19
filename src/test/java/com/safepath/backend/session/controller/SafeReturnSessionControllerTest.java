@@ -51,6 +51,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class SafeReturnSessionControllerTest {
 	@Test
+	void selectedRouteIsAvailableToOwnerAndLocationAuthorizedGuardian() throws Exception {
+		String body = """
+				{"guardianIds":[2],"selectedRoute":{"type":"SAFEST","coordinates":[{"latitude":35.0,"longitude":128.0},{"latitude":35.001,"longitude":128.0}],"distanceMeters":120,"durationSeconds":90,"safetyScore":65}}
+				""";
+		MvcResult created = mockMvc.perform(post("/api/safe-return/sessions")
+				.header("Authorization", bearer(USER_1_TOKEN)).contentType(MediaType.APPLICATION_JSON).content(body))
+				.andExpect(status().isCreated()).andReturn();
+		String id = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
+		mockMvc.perform(get("/api/safe-return/sessions/" + id + "/status").header("Authorization", bearer(USER_1_TOKEN)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.selectedRoute.type").value("SAFEST"));
+		mockMvc.perform(get("/api/guardian/monitoring/sessions/" + id + "/route").header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.coordinates[1].latitude").value(35.001));
+		mockMvc.perform(get("/api/guardian/monitoring/sessions/" + id + "/route").header("Authorization", bearer("guardian-3")))
+				.andExpect(status().isForbidden());
+		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
+		when(permissions.hasPermission(42L, 2L, com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(false);
+		mockMvc.perform(get("/api/guardian/monitoring/sessions/" + id + "/route").header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void rejectsInvalidSelectedRouteBeforeStartingSession() throws Exception {
+		mockMvc.perform(post("/api/safe-return/sessions").header("Authorization", bearer(USER_1_TOKEN))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"guardianIds\":[2],\"selectedRoute\":{\"type\":\"SAFEST\",\"coordinates\":[{\"latitude\":91,\"longitude\":128}],\"distanceMeters\":10,\"durationSeconds\":10}}"))
+				.andExpect(status().isBadRequest());
+		assertTrue(context.getBean(ActiveSessionStore.class).findByUserId(42L).isEmpty());
+	}
+	@Test
 	void channelCreationFailureReturnsExistingInternalErrorInsteadOfConflict() throws Exception {
 		doThrow(new IllegalStateException("Channel unavailable"))
 				.when(context.getBean(InMemoryChannelRegistry.class)).open(42L, java.util.Set.of(2L, 3L));

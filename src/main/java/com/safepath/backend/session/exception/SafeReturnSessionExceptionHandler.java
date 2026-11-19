@@ -13,6 +13,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 
 import java.util.NoSuchElementException;
 
@@ -42,7 +43,7 @@ public class SafeReturnSessionExceptionHandler {
 		return error(HttpStatus.BAD_REQUEST, "INVALID_SESSION_ID", "The session ID is invalid.");
 	}
 
-	@ExceptionHandler({IllegalArgumentException.class, HttpMessageNotReadableException.class})
+	@ExceptionHandler({IllegalArgumentException.class, HttpMessageNotReadableException.class, MethodArgumentNotValidException.class})
 	public ResponseEntity<SessionApiErrorResponse> handleInvalidRequest(Exception exception) {
 		return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "The request is invalid.");
 	}

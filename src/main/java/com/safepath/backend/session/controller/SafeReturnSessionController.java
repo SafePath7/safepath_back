@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/safe-return/sessions")
@@ -40,9 +41,9 @@ public class SafeReturnSessionController {
 
 	@PostMapping
 	public ResponseEntity<StartSessionResponse> startSession(
-			@AuthenticationPrincipal String firebaseUid, @RequestBody StartSessionRequest request) {
+			@AuthenticationPrincipal String firebaseUid, @Valid @RequestBody StartSessionRequest request) {
 		Long userId = authenticatedUserId(firebaseUid);
-		ActiveSession session = safeReturnSessionService.startSession(userId, request.guardianIds());
+		ActiveSession session = safeReturnSessionService.startSession(userId, request.guardianIds(), request.selectedRoute());
 		String channelId = monitoringService.getChannelId(session.id(), userId);
 		return ResponseEntity.status(HttpStatus.CREATED)
 				.body(new StartSessionResponse(session.id(), session.startedAt(), channelId));

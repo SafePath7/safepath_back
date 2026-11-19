@@ -1,6 +1,7 @@
 package com.safepath.backend.session.service;
 
 import com.safepath.backend.session.model.ActiveSession;
+import com.safepath.backend.session.dto.SelectedRoute;
 import com.safepath.backend.notification.NotificationService;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
@@ -42,18 +43,22 @@ public class SafeReturnSessionService {
 	}
 
 	public ActiveSession startSession(Long userId, Collection<Long> guardianIds) {
+		return startSession(userId, guardianIds, null);
+	}
+
+	public ActiveSession startSession(Long userId, Collection<Long> guardianIds, SelectedRoute selectedRoute) {
 		Set<Long> validated = guardianSelectionService.validateForStart(userId, guardianIds);
-		ActiveSession session = createSession(userId, validated);
+		ActiveSession session = createSession(userId, validated, selectedRoute);
 		notifyGuardians(userId, session.id(), validated, true);
 		return session;
 	}
 
-	private ActiveSession createSession(Long userId, Set<Long> guardianIds) {
+	private ActiveSession createSession(Long userId, Set<Long> guardianIds, SelectedRoute selectedRoute) {
 		if (userId == null || userId <= 0) {
 			throw new IllegalArgumentException("userId must be a positive number");
 		}
 
-		ActiveSession session = new ActiveSession(UUID.randomUUID(), userId, Instant.now());
+		ActiveSession session = new ActiveSession(UUID.randomUUID(), userId, Instant.now(), selectedRoute);
 		synchronized (activeSessionStore) {
 			activeSessionStore.saveSession(session);
 			String channelId = null;
