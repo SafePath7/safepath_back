@@ -142,3 +142,13 @@ POST·PUT·DELETE, AI 특징 추출·화자 검증, 음성 파일 업로드·교
 | 전체 Gradle 테스트 | 257 | 0 | 0 |
 
 Controller 테스트는 실제 Spring Security 필터 체인과 `CurrentUser`를 사용한다. Firebase 토큰 검증, 회원 조회, Voice Service는 모의 처리한다. PostgreSQL 영속성은 별도 Repository 테스트에서 검증했다.
+
+### 개발 진행 상황
+
+- 완료 · VoiceProfile Entity, Repository, Service 및 내부 CRUD
+- 완료 · Firebase 인증 기반 `GET /api/voice-profiles/me`
+- 완료 · 로컬 Postman TEST 1~6 통과. 토큰 없음·잘못된 토큰은 401, 프로필 미등록·등록은 각각 200, 로컬 미가입은 404를 확인했다. 다른 회원의 ID를 쿼리에 넣어도 인증된 본인의 등록 상태만 반환했다.
+- 후속 작업 · POST 생성, PUT 갱신, DELETE 삭제 REST API
+- 후속 작업 · AI 음성 특징 추출, 음성 파일 저장소 연동, Android 통합 테스트
+
+후속 REST API와 AI 연동 완료 후 `develop` 대상 최종 PR 하나로 정리할 예정이다.
