@@ -113,7 +113,7 @@ Content-Type: application/json
 
 施設の種類と既定の重みは [FacilityScore](../../src/main/java/com/safepath/backend/route/score/FacilityScore.java) で管理します。既定値は CCTV 1、SECURITY_LIGHT 1、POLICE 2、EMERGENCY_CALL_BOX 1.5、SAFETY_GUARDIAN_STORE 1 です。DB の `facility_type` は enum 名と一致する必要があり、未知の種類は採点から除外します。
 
-`safepath.route.score` 配下の設定で既定値を上書きできます。例: `safepath.route.score.cctv=2`、`safepath.route.score.duration-weight=0.5`。施設の設定キーは `cctv`、`light`、`police`、`emergency-call-box`、`safety-guardian-store` です。`segment-meters` の既定値は 100、`radius-meters` は 80、`weakest-weight` は 0.2、`duration-weight` は 0.5 です。値は暫定方針で、変更後は再起動が必要です。
+`safepath.route.score` 配下の設定で既定値を上書きできます。例: `safepath.route.score.cctv=2`、`safepath.route.score.duration-weight=1.0`。施設の設定キーは `cctv`、`light`、`police`、`emergency-call-box`、`safety-guardian-store` です。`segment-meters` の既定値は 100、`radius-meters` は 80、`weakest-weight` は 0.2、`duration-weight` は 0.5 です。値は暫定方針で、変更後は再起動が必要です。
 
 `SafetyFactor` は区間ごとの寄与を計算する拡張ポイントです。現在サービスに接続されているのは施設戦略のみで、危険イベントや SOS の追加には実データへのアクセス、戦略実装、サービスへの接続が必要です。`ScorePolicy` の `distance-weight`、`safest-distance-weight`、`safest-duration-weight` は現在の経路選択では使用されていません。
 

@@ -113,7 +113,7 @@ Content-Type: application/json
 
 시설 유형과 기본 가중치는 [FacilityScore](../../src/main/java/com/safepath/backend/route/score/FacilityScore.java)에서 관리합니다. 기본값은 CCTV 1, SECURITY_LIGHT 1, POLICE 2, EMERGENCY_CALL_BOX 1.5, SAFETY_GUARDIAN_STORE 1입니다. DB의 `facility_type`이 enum 이름과 일치해야 하며 알 수 없는 유형은 점수에서 제외됩니다.
 
-`safepath.route.score` 아래의 설정으로 기본값을 덮어쓸 수 있습니다. 예: `safepath.route.score.cctv=2`, `safepath.route.score.duration-weight=0.5`. 시설 설정 키는 `cctv`, `light`, `police`, `emergency-call-box`, `safety-guardian-store`입니다. `segment-meters` 기본 100, `radius-meters` 80, `weakest-weight` 0.2, `duration-weight` 0.5입니다. 값은 임시 정책값이며 변경 후 재시작이 필요합니다.
+`safepath.route.score` 아래의 설정으로 기본값을 덮어쓸 수 있습니다. 예: `safepath.route.score.cctv=2`, `safepath.route.score.duration-weight=1.0`. 시설 설정 키는 `cctv`, `light`, `police`, `emergency-call-box`, `safety-guardian-store`입니다. `segment-meters` 기본 100, `radius-meters` 80, `weakest-weight` 0.2, `duration-weight` 1.0입니다. 값은 임시 정책값이며 변경 후 재시작이 필요합니다.
 
 `SafetyFactor`는 구간별 기여를 계산하는 확장 지점입니다. 현재는 시설 전략만 서비스에 연결되어 있으므로 위험 이벤트·SOS 등을 도입할 때는 실제 데이터 접근, 전략 구현 및 서비스 연결이 추가로 필요합니다. `ScorePolicy`의 `distance-weight`, `safest-distance-weight`, `safest-duration-weight` 설정은 현재 경로 선정에 사용되지 않습니다.
 

@@ -25,7 +25,7 @@ class RouteServiceTest {
         assertEquals(List.of("RECOMMENDED","SAFEST","FASTEST"),result.routes().stream().map(r->r.type()).toList());
         verify(repository,times(1)).findFacilitiesInBounds(anyDouble(),anyDouble(),anyDouble(),anyDouble());
     }
-    @Test void shortestUsesDistanceAndExcludesLongerCandidates() {
+    @Test void allCandidatesAreConsideredForFastestRoute() {
         var client=mock(MapboxRouteClient.class); var repository=mock(SafetyFacilityService.class);
         var policy=new ScorePolicy(new org.springframework.mock.env.MockEnvironment());
         var request=new RouteRequest(new Coordinate(35.0,128.0),new Coordinate(35.001,128.0));
@@ -37,8 +37,7 @@ class RouteServiceTest {
         when(repository.findFacilitiesInBounds(anyDouble(),anyDouble(),anyDouble(),anyDouble())).thenReturn(List.of());
         var result=new RouteService(client,repository,new RouteScorer(policy),policy).recommend(request);
         assertEquals(4,result.candidateCount());
-        assertEquals(third.coordinates(),result.routes().get(2).coordinates());
-        assertTrue(result.routes().stream().noneMatch(route -> route.coordinates().equals(fourth.coordinates())));
+        assertEquals(fourth.coordinates(),result.routes().get(2).coordinates());
         assertEquals(List.of("FASTEST"),result.routes().get(0).sameAsTypes());
     }
     @Test void longerDurationLowersRecommendationWhenOtherFactorsMatch() {
@@ -55,6 +54,22 @@ class RouteServiceTest {
         assertEquals(faster.coordinates(),result.routes().get(0).coordinates());
         assertEquals(slower.coordinates(),result.routes().get(1).coordinates());
         assertEquals(faster.coordinates(),result.routes().get(2).coordinates());
+    }
+    @Test void recommendationBalancesSafetyAgainstExtraMinutes() {
+        var client=mock(MapboxRouteClient.class); var facilities=mock(SafetyFacilityService.class);
+        var scorer=mock(RouteScorer.class);
+        var policy=new ScorePolicy(new org.springframework.mock.env.MockEnvironment());
+        var request=new RouteRequest(new Coordinate(35.0,128.0),new Coordinate(35.001,128.0));
+        var fast=new RouteCandidate(List.of(request.origin(),request.destination()),100,60);
+        var safe=new RouteCandidate(List.of(request.origin(),new Coordinate(35.0005,128.0001),request.destination()),120,180);
+        when(client.find(request)).thenReturn(List.of(fast,safe));
+        when(facilities.findFacilitiesInBounds(anyDouble(),anyDouble(),anyDouble(),anyDouble())).thenReturn(List.of());
+        when(scorer.evaluate(eq(fast),anyList())).thenReturn(new RouteScorer.Evaluation(70.0,1,java.util.Map.of()));
+        when(scorer.evaluate(eq(safe),anyList())).thenReturn(new RouteScorer.Evaluation(71.5,1,java.util.Map.of()));
+        var result=new RouteService(client,facilities,scorer,policy).recommend(request);
+        assertEquals(fast.coordinates(),result.routes().get(0).coordinates());
+        assertEquals(safe.coordinates(),result.routes().get(1).coordinates());
+        assertEquals(fast.coordinates(),result.routes().get(2).coordinates());
     }
     @Test void safestUsesOnlyFacilityScoreEvenWhenSlow() {
         var client=mock(MapboxRouteClient.class); var facilityService=mock(SafetyFacilityService.class);

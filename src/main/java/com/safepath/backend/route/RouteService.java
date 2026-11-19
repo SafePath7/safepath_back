@@ -25,7 +25,7 @@ public class RouteService {
     public RouteResponse recommend(RouteRequest request) {
         if (FacilitySafetyFactor.distance(request.origin(),request.destination()) < 1) throw ApiException.badRequest("???? ???? ?? ?????.");
         List<RouteCandidate> found=client.find(request);
-        List<RouteCandidate> candidates=found.stream().sorted(Comparator.comparingDouble(RouteCandidate::distanceMeters)).limit(3).toList();
+        List<RouteCandidate> candidates=found;
         if (candidates.stream().anyMatch(c -> c.distanceMeters()>20000)) throw ApiException.badRequest("20km ??? ?? ??? ?????.");
         List<Coordinate> all=candidates.stream().flatMap(c->c.coordinates().stream()).toList();
         double minLat=all.stream().mapToDouble(Coordinate::latitude).min().orElseThrow();

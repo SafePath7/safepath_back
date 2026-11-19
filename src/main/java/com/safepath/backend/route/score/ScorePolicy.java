@@ -18,7 +18,7 @@ public class ScorePolicy {
         weakestWeight = value(environment, "weakest-weight", 0.2);
         distanceWeight = value(environment, "distance-weight", 25);
         safestDistanceWeight = value(environment, "safest-distance-weight", 5);
-        durationWeight = value(environment, "duration-weight", 0.5);
+        durationWeight = value(environment, "duration-weight", 1.0);
         safestDurationWeight = value(environment, "safest-duration-weight", 0.1);
         if (segmentMeters <= 0 || radiusMeters <= 0 || weakestWeight < 0 || weakestWeight > 1
                 || distanceWeight < 0 || safestDistanceWeight < 0 || durationWeight < 0 || safestDurationWeight < 0) {

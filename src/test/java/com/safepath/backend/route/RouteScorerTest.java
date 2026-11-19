@@ -22,6 +22,13 @@ class RouteScorerTest {
         var two=scorer.evaluate(route,List.of(new FacilitySafetyFactor(List.of(facility,facility),policy)));
         assertEquals(one.safetyScore(),two.safetyScore()); assertEquals(1,two.counts().get("CCTV"));
     }
+    @Test void facilityContributionFallsFasterWithDistance() {
+        var midpoint = new Coordinate(35.0, 128.0);
+        var facility = new SafetyFacilityResponse(1L, 35.00036, 128.0, "address", "CCTV");
+        double distance = FacilitySafetyFactor.distance(midpoint, new Coordinate(facility.latitude(), facility.longitude()));
+        var result = new FacilitySafetyFactor(List.of(facility), policy).evaluate(List.of(midpoint));
+        assertEquals(Math.pow(1 - distance / policy.radiusMeters, 2), result.evidence()[0], 1e-9);
+    }
     @Test void policeHasGreaterWeight() {
         assertTrue(policy.weight("POLICE") > policy.weight("CCTV")); assertEquals(0,policy.weight("UNKNOWN"));
     }

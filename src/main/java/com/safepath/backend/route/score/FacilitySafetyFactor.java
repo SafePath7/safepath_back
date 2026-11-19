@@ -22,7 +22,7 @@ public class FacilitySafetyFactor implements SafetyFactor {
                 if (distance <= min) { min=distance; nearest=i; }
             }
             if (nearest >= 0) {
-                evidence[nearest] += weight * (1 - min / policy.radiusMeters);
+                evidence[nearest] += weight * Math.pow(1 - min / policy.radiusMeters, 2);
                 counts.merge(facility.facilityType(), 1, Integer::sum);
             }
         }

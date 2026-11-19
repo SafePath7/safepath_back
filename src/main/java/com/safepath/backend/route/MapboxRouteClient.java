@@ -53,8 +53,7 @@ public class MapboxRouteClient {
                 }
             }
         }
-        return candidates.stream().sorted(java.util.Comparator.comparingDouble(RouteCandidate::distanceMeters))
-                .limit(6).toList();
+        return candidates.stream().sorted(java.util.Comparator.comparingDouble(RouteCandidate::distanceMeters)).toList();
     }
 
     static void mergeCandidates(List<RouteCandidate> candidates, List<RouteCandidate> additional) {
