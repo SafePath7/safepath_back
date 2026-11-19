@@ -86,7 +86,7 @@ public class GuardianMonitoringService {
 	}
 
 	public ActiveSession getMonitoringStatus(UUID sessionId, Long guardianId) {
-		return validateMonitoringPermission(sessionId, guardianId, MonitoringPermissionType.STATUS);
+		return validateMonitoringPermission(sessionId, guardianId, MonitoringPermissionType.LOCATION);
 	}
 
 	/** guardianId must be resolved server-side from the authenticated Firebase principal. */

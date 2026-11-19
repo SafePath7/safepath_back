@@ -15,7 +15,7 @@ public record RegistrationSummaryResponse(long id, long userId, String userName,
         return new RegistrationSummaryResponse(registration.getId(), registration.getUserId(), userName,
                 registration.getGuardianId(), guardianName, registration.getStatus(),
                 UtcTime.toInstant(registration.getRequestedAt()), UtcTime.toInstant(registration.getAcceptedAt()),
-                registration.isCanViewLocation(), registration.isCanViewStatus(),
+                registration.isCanViewLocation(), registration.isCanViewLocation(),
                 registration.isCanViewPersonalInfo());
     }
 }

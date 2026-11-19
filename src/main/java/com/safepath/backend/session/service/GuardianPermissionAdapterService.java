@@ -28,7 +28,7 @@ public class GuardianPermissionAdapterService implements GuardianPermissionServi
 			throw new IllegalArgumentException("permissionType must not be null");
 		}
 		PermissionType type = switch (permissionType) {
-			case STATUS -> PermissionType.STATUS;
+			case STATUS -> PermissionType.LOCATION;
 			case LOCATION -> PermissionType.LOCATION;
 		};
 		return guardianRegistrationService.hasGuardianPermission(userId, guardianId, type);

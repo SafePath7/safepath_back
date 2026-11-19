@@ -39,6 +39,7 @@ public class LocationUpdateController {
                 request.longitude(),
                 request.accuracyMeters(),
                 request.capturedAt(),
-                Instant.now());
+                Instant.now(),
+                "UNKNOWN");
     }
 }

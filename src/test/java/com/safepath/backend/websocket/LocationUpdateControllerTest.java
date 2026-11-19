@@ -26,6 +26,7 @@ class LocationUpdateControllerTest {
 
         assertEquals("1", response.senderId());
         assertEquals(37.5665, response.latitude());
+        assertEquals("UNKNOWN", response.safetyStatus());
     }
 
     @Test

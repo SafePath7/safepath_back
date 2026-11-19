@@ -37,10 +37,10 @@ class GuardianPermissionAdapterServiceTest {
 
 	@Test
 	void statusPermissionPreservesAllowedAndDeniedResults() {
-		when(registrations.hasGuardianPermission(42L, 43L, PermissionType.STATUS)).thenReturn(true, false);
+		when(registrations.hasGuardianPermission(42L, 43L, PermissionType.LOCATION)).thenReturn(true, false);
 		assertTrue(adapter.hasPermission(42L, 43L, MonitoringPermissionType.STATUS));
 		assertFalse(adapter.hasPermission(42L, 43L, MonitoringPermissionType.STATUS));
-		verify(registrations, org.mockito.Mockito.times(2)).hasGuardianPermission(42L, 43L, PermissionType.STATUS);
+		verify(registrations, org.mockito.Mockito.times(2)).hasGuardianPermission(42L, 43L, PermissionType.LOCATION);
 		verifyNoMoreInteractions(registrations);
 	}
 

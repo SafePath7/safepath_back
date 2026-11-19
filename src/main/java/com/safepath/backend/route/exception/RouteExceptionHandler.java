@@ -1,4 +1,4 @@
-package com.safepath.backend.route;
+package com.safepath.backend.route.exception;
 
 import com.safepath.backend.common.exception.ApiException;
 import org.springframework.http.ProblemDetail;

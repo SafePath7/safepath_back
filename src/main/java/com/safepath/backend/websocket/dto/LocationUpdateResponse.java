@@ -9,6 +9,7 @@ public record LocationUpdateResponse(
         double longitude,
         Double accuracyMeters,
         Instant capturedAt,
-        Instant receivedAt
+        Instant receivedAt,
+        String safetyStatus
 ) {
 }

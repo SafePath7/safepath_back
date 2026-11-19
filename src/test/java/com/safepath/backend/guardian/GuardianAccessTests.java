@@ -30,9 +30,9 @@ class GuardianAccessTests {
     void acceptedRegistrationReportsItsOwnPermissions() {
         registration(RegistrationStatus.ACCEPTED, true, false);
 
-        assertThat(service.getGuardianAccess(USER, GUARDIAN)).isEqualTo(new GuardianAccess(true, true, false));
+        assertThat(service.getGuardianAccess(USER, GUARDIAN)).isEqualTo(new GuardianAccess(true, true, true));
         assertThat(service.hasGuardianPermission(USER, GUARDIAN, PermissionType.LOCATION)).isTrue();
-        assertThat(service.hasGuardianPermission(USER, GUARDIAN, PermissionType.STATUS)).isFalse();
+        assertThat(service.hasGuardianPermission(USER, GUARDIAN, PermissionType.STATUS)).isTrue();
     }
 
     @ParameterizedTest

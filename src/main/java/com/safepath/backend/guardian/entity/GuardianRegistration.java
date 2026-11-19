@@ -97,7 +97,7 @@ public class GuardianRegistration {
     public boolean allows(PermissionType type) {
         return status == RegistrationStatus.ACCEPTED && switch (type) {
             case LOCATION -> canViewLocation;
-            case STATUS -> canViewStatus;
+            case STATUS -> canViewLocation;
             case PERSONAL_INFO -> canViewPersonalInfo;
         };
     }

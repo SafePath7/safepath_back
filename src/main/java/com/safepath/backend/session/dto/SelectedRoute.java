@@ -14,7 +14,8 @@ public record SelectedRoute(
         @NotNull @Size(min = 2, max = 10000) List<@NotNull @Valid Coordinate> coordinates,
         @NotNull @DecimalMin("0.0") @DecimalMax("20000.0") Double distanceMeters,
         @NotNull @DecimalMin("0.0") Double durationSeconds,
-        @DecimalMin("0.0") @DecimalMax("100.0") Double safetyScore) {
+        @DecimalMin("0.0") @DecimalMax("100.0") Double safetyScore,
+        @Size(max = 200) String destinationName) {
     public SelectedRoute {
         if (coordinates != null) coordinates = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(coordinates));
     }

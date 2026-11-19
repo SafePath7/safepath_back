@@ -66,6 +66,7 @@ class WebSocketLocationIntegrationTest {
 
             assertTrue(message.contains("/topic/connections/" + channelId + "/locations"));
             assertTrue(message.contains("\"senderId\":\"1\""));
+            assertTrue(message.contains("\"safetyStatus\":\"UNKNOWN\""));
             assertTrue(message.contains("\"latitude\":37.5665"));
         } finally {
             user.close();

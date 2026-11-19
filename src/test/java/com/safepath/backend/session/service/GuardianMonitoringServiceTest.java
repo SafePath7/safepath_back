@@ -47,7 +47,7 @@ class GuardianMonitoringServiceTest {
 		allowStatus();
 		assertSame(session, monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID));
 		verify(permissionService).hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID);
-		verify(permissionService).hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.STATUS);
+		verify(permissionService).hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION);
 		verifyNoMoreInteractions(permissionService);
 	}
 
@@ -107,7 +107,7 @@ class GuardianMonitoringServiceTest {
 	void propagatesPermissionLookupFailureWithoutReturningSession() {
 		when(permissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
 		IllegalStateException failure = new IllegalStateException("Lookup unavailable");
-		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.STATUS))
+		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION))
 				.thenThrow(failure);
 		assertSame(failure, assertThrows(IllegalStateException.class,
 				() -> monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID)));
@@ -115,7 +115,8 @@ class GuardianMonitoringServiceTest {
 
 	@Test
 	void statusPermissionDoesNotAuthorizeLocation() {
-		allowStatus();
+		when(permissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
+		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.STATUS)).thenReturn(true);
 		assertThrows(AccessDeniedException.class, () -> monitoringService.validateMonitoringPermission(
 				session.id(), GUARDIAN_ID, MonitoringPermissionType.LOCATION));
 		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION))
@@ -125,12 +126,11 @@ class GuardianMonitoringServiceTest {
 	}
 
 	@Test
-	void locationPermissionDoesNotAuthorizeStatus() {
+	void locationPermissionAuthorizesStatus() {
 		when(permissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
 		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION))
 				.thenReturn(true);
-		assertThrows(AccessDeniedException.class,
-				() -> monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID));
+		assertSame(session, monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID));
 	}
 
 	@Test
@@ -148,7 +148,7 @@ class GuardianMonitoringServiceTest {
 
 	private void allowStatus() {
 		when(permissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
-		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.STATUS))
+		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION))
 				.thenReturn(true);
 	}
 }

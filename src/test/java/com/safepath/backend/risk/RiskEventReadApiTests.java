@@ -90,10 +90,10 @@ class RiskEventReadApiTests {
     }
 
     @Test
-    void acceptedGuardianWithStatusPermissionReadsTheUsersEvents() throws Exception {
-        mvc.perform(get(URL).param("userId", Long.toString(owner)).header("Authorization", "Bearer guardian"))
+    void acceptedGuardianWithLocationPermissionReadsTheUsersEvents() throws Exception {
+        mvc.perform(get(URL).param("userId", Long.toString(owner)).header("Authorization", "Bearer location-only"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3));
-        mvc.perform(get(URL + "/" + newEvent).header("Authorization", "Bearer guardian"))
+        mvc.perform(get(URL + "/" + newEvent).header("Authorization", "Bearer location-only"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(newEvent))
                 .andExpect(jsonPath("$.userId").value(owner));
@@ -103,8 +103,8 @@ class RiskEventReadApiTests {
     }
 
     @Test
-    void anyoneWithoutAnAcceptedStatusPermissionIsForbidden() throws Exception {
-        for (String uid : new String[] {"location-only", "pending", "suspended", "stranger"}) {
+    void anyoneWithoutAnAcceptedLocationPermissionIsForbidden() throws Exception {
+        for (String uid : new String[] {"guardian", "pending", "suspended", "stranger"}) {
             mvc.perform(get(URL).param("userId", Long.toString(owner)).header("Authorization", "Bearer " + uid))
                     .andExpect(status().isForbidden());
             mvc.perform(get(URL + "/" + newEvent).header("Authorization", "Bearer " + uid))

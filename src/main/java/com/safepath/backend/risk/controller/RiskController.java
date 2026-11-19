@@ -33,7 +33,7 @@ public class RiskController {
         return service.createEvent(users.resolve(auth), request);
     }
 
-    /** userId omitted: my own events. Another member's events need guardian STATUS permission. */
+    /** userId omitted: my own events. Another member's events need guardian LOCATION permission. */
     @GetMapping("/risk-events")
     public List<RiskEventDetailResponse> getEvents(Authentication auth,
             @RequestParam(required = false) @Positive Long userId,

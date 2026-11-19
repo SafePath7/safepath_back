@@ -53,16 +53,18 @@ class SafeReturnSessionControllerTest {
 	@Test
 	void selectedRouteIsAvailableToOwnerAndLocationAuthorizedGuardian() throws Exception {
 		String body = """
-				{"guardianIds":[2],"selectedRoute":{"type":"SAFEST","coordinates":[{"latitude":35.0,"longitude":128.0},{"latitude":35.001,"longitude":128.0}],"distanceMeters":120,"durationSeconds":90,"safetyScore":65}}
+				{"guardianIds":[2],"selectedRoute":{"type":"SAFEST","coordinates":[{"latitude":35.0,"longitude":128.0},{"latitude":35.001,"longitude":128.0}],"distanceMeters":120,"durationSeconds":90,"safetyScore":65,"destinationName":"CU 대구신당점"}}
 				""";
 		MvcResult created = mockMvc.perform(post("/api/safe-return/sessions")
 				.header("Authorization", bearer(USER_1_TOKEN)).contentType(MediaType.APPLICATION_JSON).content(body))
 				.andExpect(status().isCreated()).andReturn();
 		String id = objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asText();
 		mockMvc.perform(get("/api/safe-return/sessions/" + id + "/status").header("Authorization", bearer(USER_1_TOKEN)))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.selectedRoute.type").value("SAFEST"));
+				.andExpect(status().isOk()).andExpect(jsonPath("$.selectedRoute.type").value("SAFEST"))
+				.andExpect(jsonPath("$.selectedRoute.destinationName").value("CU 대구신당점"));
 		mockMvc.perform(get("/api/guardian/monitoring/sessions/" + id + "/route").header("Authorization", bearer("guardian-2")))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.coordinates[1].latitude").value(35.001));
+				.andExpect(status().isOk()).andExpect(jsonPath("$.coordinates[1].latitude").value(35.001))
+				.andExpect(jsonPath("$.destinationName").value("CU 대구신당점"));
 		mockMvc.perform(get("/api/guardian/monitoring/sessions/" + id + "/route").header("Authorization", bearer("guardian-3")))
 				.andExpect(status().isForbidden());
 		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
@@ -320,7 +322,7 @@ class SafeReturnSessionControllerTest {
 	}
 
 	@Test
-	void monitoringRequiresAuthenticatedSelectedGuardianAndSeparatePermissions() throws Exception {
+	void monitoringRequiresAuthenticatedSelectedGuardianAndLocationPermission() throws Exception {
 		UUID sessionId = startSession(USER_1_TOKEN);
 		String base = "/api/guardian/monitoring/sessions/" + sessionId;
 		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
@@ -334,11 +336,11 @@ class SafeReturnSessionControllerTest {
 		mockMvc.perform(get(base + "/channel").header("Authorization", bearer("guardian-2")))
 				.andExpect(status().isOk());
 		mockMvc.perform(get(base + "/status").header("Authorization", bearer("guardian-2")))
-				.andExpect(status().isOk());
+				.andExpect(status().isForbidden());
 		when(permissions.hasPermission(42L, 3L,
 				com.safepath.backend.session.model.MonitoringPermissionType.STATUS)).thenReturn(false);
 		mockMvc.perform(get(base + "/status").header("Authorization", bearer("guardian-3")))
-				.andExpect(status().isForbidden());
+				.andExpect(status().isOk());
 		mockMvc.perform(get(base + "/channel").header("Authorization", bearer("guardian-3")))
 				.andExpect(status().isOk());
 		for (String suffix : java.util.List.of("/status", "/channel")) {

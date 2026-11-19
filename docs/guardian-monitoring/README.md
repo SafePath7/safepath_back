@@ -1,5 +1,9 @@
 # 보호자 모니터링 기반 구조
 
+> 현재 정책: 보호자의 세션 상태 및 위험 이벤트·미디어 조회는 별도 STATUS 값 대신 LOCATION 권한을 검사합니다. 수락 관계와 각 기능의 기존 선택 보호자 검사는 유지합니다. 아래 과거 작업 기록의 STATUS 분리 설명은 당시 구현을 기록한 것입니다.
+
+위치 WebSocket 응답에는 `safetyStatus`가 포함됩니다. AI 판단 연동 전에는 서버가 `UNKNOWN`을 반환하며, 이 값은 정상 판정이 아닙니다. 위험 상태 변경의 독립적인 실시간 알림과 AI 연동은 아직 구현되지 않았습니다.
+
 ## 현재 공개 REST 계약 (프론트 합의 반영)
 
 이 절은 아래의 이전 단계 기록 중 REST 미공개·계약 미확정 설명을 대체한다.
@@ -9,7 +13,7 @@
 
 | 메서드와 경로 | 성공 응답 | 권한 |
 |---|---|---|
-| `GET /api/guardian/monitoring/sessions/{sessionId}/status` | `200 {id, startedAt}` | ACCEPTED + 선택 보호자 + STATUS |
+| `GET /api/guardian/monitoring/sessions/{sessionId}/status` | `200 {id, startedAt}` | ACCEPTED + 선택 보호자 + LOCATION |
 | `GET /api/guardian/monitoring/sessions/{sessionId}/location` | `200 {latitude, longitude, accuracyMeters, capturedAt}` | ACCEPTED + 선택 보호자 + LOCATION |
 | `GET /api/guardian/monitoring/sessions/{sessionId}/channel` | `200 {channelId}` | ACCEPTED + 선택 보호자 + LOCATION, 소유자 제외 |
 
