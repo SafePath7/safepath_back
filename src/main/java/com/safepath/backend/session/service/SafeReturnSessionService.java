@@ -1,5 +1,9 @@
 package com.safepath.backend.session.service;
 
+import com.safepath.backend.guardian.service.GuardianRegistrationService;
+import com.safepath.backend.guardian.entity.PermissionType;
+import com.safepath.backend.session.exception.GuardianSelectionDeniedException;
+import java.util.LinkedHashSet;
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.dto.SelectedRoute;
 import com.safepath.backend.notification.NotificationService;
@@ -28,17 +32,17 @@ public class SafeReturnSessionService {
 	private final SelectedGuardianStore selectedGuardianStore;
 	private final SessionChannelStore sessionChannelStore;
 	private final InMemoryChannelRegistry channelRegistry;
-	private final GuardianSelectionService guardianSelectionService;
+	private final GuardianRegistrationService guardianRegistrationService;
 	private final NotificationService notifications;
 
 	public SafeReturnSessionService(ActiveSessionStore activeSessionStore, SelectedGuardianStore selectedGuardianStore,
 			SessionChannelStore sessionChannelStore, InMemoryChannelRegistry channelRegistry,
-			GuardianSelectionService guardianSelectionService, NotificationService notifications) {
+			GuardianRegistrationService guardianRegistrationService, NotificationService notifications) {
 		this.activeSessionStore = activeSessionStore;
 		this.selectedGuardianStore = selectedGuardianStore;
 		this.sessionChannelStore = sessionChannelStore;
 		this.channelRegistry = channelRegistry;
-		this.guardianSelectionService = guardianSelectionService;
+		this.guardianRegistrationService = guardianRegistrationService;
 		this.notifications = notifications;
 	}
 
@@ -47,10 +51,31 @@ public class SafeReturnSessionService {
 	}
 
 	public ActiveSession startSession(Long userId, Collection<Long> guardianIds, SelectedRoute selectedRoute) {
-		Set<Long> validated = guardianSelectionService.validateForStart(userId, guardianIds);
+		Set<Long> validated = validateForStart(userId, guardianIds);
 		ActiveSession session = createSession(userId, validated, selectedRoute);
 		notifyGuardians(userId, session.id(), validated, true);
 		return session;
+	}
+
+	Set<Long> validateForStart(Long ownerId, Collection<Long> guardianIds) {
+		if (ownerId == null || ownerId <= 0 || guardianIds == null || guardianIds.isEmpty()) {
+			throw new IllegalArgumentException("Owner and at least one guardian are required");
+		}
+		Set<Long> uniqueIds = new LinkedHashSet<>(guardianIds);
+		for (Long guardianId : uniqueIds) {
+			if (guardianId == null || guardianId <= 0) {
+				throw new IllegalArgumentException("guardianId must be a positive number");
+			}
+			if (ownerId.equals(guardianId)) {
+				throw new GuardianSelectionDeniedException("Owner cannot be selected as guardian");
+			}
+		}
+		for (Long guardianId : uniqueIds) {
+			if (!guardianRegistrationService.hasGuardianPermission(ownerId, guardianId, PermissionType.LOCATION)) {
+				throw new GuardianSelectionDeniedException("Guardian selection denied");
+			}
+		}
+		return Set.copyOf(uniqueIds);
 	}
 
 	private ActiveSession createSession(Long userId, Set<Long> guardianIds, SelectedRoute selectedRoute) {
@@ -107,6 +132,15 @@ public class SafeReturnSessionService {
 		}
 
 		return session;
+	}
+
+	/** Resolve an active session using the server-maintained channel mapping and verified owner ID. */
+	public ActiveSession getSessionForOwnerChannel(String channelId, Long userId) {
+		synchronized (activeSessionStore) {
+			UUID sessionId = sessionChannelStore.findSessionIdByChannelId(channelId)
+					.orElseThrow(() -> new NoSuchElementException("Session channel not found"));
+			return getSessionStatus(sessionId, userId);
+		}
 	}
 
 	public void endSession(UUID sessionId, Long userId) {

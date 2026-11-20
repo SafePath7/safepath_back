@@ -1,5 +1,7 @@
 package com.safepath.backend.session.service;
 
+import com.safepath.backend.monitoring.service.GuardianMonitoringService;
+
 import com.safepath.backend.guardian.entity.GuardianRegistration;
 import com.safepath.backend.guardian.entity.RegistrationStatus;
 import com.safepath.backend.guardian.repository.GuardianRegistrationRepository;
@@ -43,10 +45,9 @@ class GuardianLocationSubscriptionTest {
 	private final SessionChannelStore mappings = spy(new SessionChannelStore());
 	private final InMemoryChannelRegistry channels = new InMemoryChannelRegistry();
 	private final GuardianRegistrationRepository repository = mock(GuardianRegistrationRepository.class);
-	private final GuardianPermissionService permissions = new GuardianPermissionAdapterService(
-			new GuardianRegistrationService(repository, mock(GuardianRequestNotifier.class)));
+	private final GuardianRegistrationService permissions = new GuardianRegistrationService(repository, mock(GuardianRequestNotifier.class));
 	private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(
-			sessions, selected, mappings, channels, new GuardianSelectionService(sessions, selected, permissions), mock(com.safepath.backend.notification.NotificationService.class));
+			sessions, selected, mappings, channels, permissions, mock(com.safepath.backend.notification.NotificationService.class));
 	private final GuardianMonitoringService monitoring = new GuardianMonitoringService(
 			sessions, permissions, selected, mappings);
 	private final GuardianRegistration registration = BeanUtils.instantiateClass(GuardianRegistration.class);
@@ -176,6 +177,7 @@ class GuardianLocationSubscriptionTest {
 				() -> monitoring.validateGuardianLocationSubscription(channelId, 43L)));
 		doReturn(Optional.of(registration)).doThrow(failure)
 				.when(repository).findByUserIdAndGuardianId(42L, 43L);
+		assertSame(session, monitoring.validateGuardianLocationSubscription(channelId, 43L));
 		assertSame(failure, assertThrows(DataAccessResourceFailureException.class,
 				() -> monitoring.validateGuardianLocationSubscription(channelId, 43L)));
 	}

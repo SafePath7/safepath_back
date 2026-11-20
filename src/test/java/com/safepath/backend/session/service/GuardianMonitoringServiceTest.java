@@ -1,7 +1,9 @@
 package com.safepath.backend.session.service;
 
+import com.safepath.backend.guardian.service.GuardianRegistrationService;
+import com.safepath.backend.monitoring.service.GuardianMonitoringService;
+
 import com.safepath.backend.session.model.ActiveSession;
-import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
 import com.safepath.backend.session.store.SessionChannelStore;
@@ -26,9 +28,9 @@ class GuardianMonitoringServiceTest {
 
 	private final ActiveSessionStore activeSessionStore = new ActiveSessionStore();
 	private final SelectedGuardianStore selectedGuardianStore = new SelectedGuardianStore(activeSessionStore);
-	private final GuardianPermissionService permissionService = mock(GuardianPermissionService.class);
-	private final GuardianPermissionService selectionPermissionService = mock(GuardianPermissionService.class);
-	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new GuardianSelectionService(activeSessionStore, selectedGuardianStore, selectionPermissionService), mock(com.safepath.backend.notification.NotificationService.class));
+	private final GuardianRegistrationService permissionService = mock(GuardianRegistrationService.class);
+	private final GuardianRegistrationService selectionPermissionService = mock(GuardianRegistrationService.class);
+	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), selectionPermissionService, mock(com.safepath.backend.notification.NotificationService.class));
 	private final GuardianMonitoringService monitoringService = new GuardianMonitoringService(
 			activeSessionStore, permissionService, selectedGuardianStore, new SessionChannelStore());
 	private ActiveSession session;
@@ -37,8 +39,8 @@ class GuardianMonitoringServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		when(selectionPermissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
-		when(selectionPermissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION)).thenReturn(true);
+
+		when(selectionPermissionService.hasGuardianPermission(OWNER_ID, GUARDIAN_ID, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(true);
 		session = sessionService.startSession(OWNER_ID, Set.of(GUARDIAN_ID));
 	}
 
@@ -46,8 +48,7 @@ class GuardianMonitoringServiceTest {
 	void returnsExistingSessionForAcceptedSelectedGuardianWithStatusPermission() {
 		allowStatus();
 		assertSame(session, monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID));
-		verify(permissionService).hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID);
-		verify(permissionService).hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION);
+		verify(permissionService).hasGuardianPermission(OWNER_ID, GUARDIAN_ID, com.safepath.backend.guardian.entity.PermissionType.LOCATION);
 		verifyNoMoreInteractions(permissionService);
 	}
 
@@ -55,13 +56,13 @@ class GuardianMonitoringServiceTest {
 	void rejectsUnacceptedRelationshipBeforeCheckingPermission() {
 		assertThrows(AccessDeniedException.class,
 				() -> monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID));
-		verify(permissionService).hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID);
+		verify(permissionService).hasGuardianPermission(OWNER_ID, GUARDIAN_ID, com.safepath.backend.guardian.entity.PermissionType.LOCATION);
 		verifyNoMoreInteractions(permissionService);
 	}
 
 	@Test
 	void rejectsMissingStatusPermission() {
-		when(permissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
+
 		assertThrows(AccessDeniedException.class,
 				() -> monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID));
 	}
@@ -98,37 +99,37 @@ class GuardianMonitoringServiceTest {
 	@Test
 	void propagatesRelationshipLookupFailureWithoutReturningSession() {
 		IllegalStateException failure = new IllegalStateException("Lookup unavailable");
-		when(permissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenThrow(failure);
+		when(permissionService.hasGuardianPermission(OWNER_ID, GUARDIAN_ID, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenThrow(failure);
 		assertSame(failure, assertThrows(IllegalStateException.class,
 				() -> monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID)));
 	}
 
 	@Test
 	void propagatesPermissionLookupFailureWithoutReturningSession() {
-		when(permissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
+
 		IllegalStateException failure = new IllegalStateException("Lookup unavailable");
-		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION))
+		when(permissionService.hasGuardianPermission(OWNER_ID, GUARDIAN_ID, com.safepath.backend.guardian.entity.PermissionType.LOCATION))
 				.thenThrow(failure);
 		assertSame(failure, assertThrows(IllegalStateException.class,
 				() -> monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID)));
 	}
 
 	@Test
-	void statusPermissionDoesNotAuthorizeLocation() {
-		when(permissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
-		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.STATUS)).thenReturn(true);
+	void locationPermissionIsRequiredForMonitoring() {
+
+
 		assertThrows(AccessDeniedException.class, () -> monitoringService.validateMonitoringPermission(
-				session.id(), GUARDIAN_ID, MonitoringPermissionType.LOCATION));
-		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION))
+				session.id(), GUARDIAN_ID));
+		when(permissionService.hasGuardianPermission(OWNER_ID, GUARDIAN_ID, com.safepath.backend.guardian.entity.PermissionType.LOCATION))
 				.thenReturn(true);
 		assertSame(session, monitoringService.validateMonitoringPermission(
-				session.id(), GUARDIAN_ID, MonitoringPermissionType.LOCATION));
+				session.id(), GUARDIAN_ID));
 	}
 
 	@Test
 	void locationPermissionAuthorizesStatus() {
-		when(permissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
-		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION))
+
+		when(permissionService.hasGuardianPermission(OWNER_ID, GUARDIAN_ID, com.safepath.backend.guardian.entity.PermissionType.LOCATION))
 				.thenReturn(true);
 		assertSame(session, monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID));
 	}
@@ -141,14 +142,12 @@ class GuardianMonitoringServiceTest {
 			assertThrows(IllegalArgumentException.class,
 					() -> monitoringService.getMonitoringStatus(session.id(), invalidId));
 		}
-		assertThrows(IllegalArgumentException.class, () -> monitoringService.validateMonitoringPermission(
-				session.id(), GUARDIAN_ID, null));
 		verifyNoInteractions(permissionService);
 	}
 
 	private void allowStatus() {
-		when(permissionService.hasAcceptedRelationship(OWNER_ID, GUARDIAN_ID)).thenReturn(true);
-		when(permissionService.hasPermission(OWNER_ID, GUARDIAN_ID, MonitoringPermissionType.LOCATION))
+
+		when(permissionService.hasGuardianPermission(OWNER_ID, GUARDIAN_ID, com.safepath.backend.guardian.entity.PermissionType.LOCATION))
 				.thenReturn(true);
 	}
 }

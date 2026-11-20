@@ -5,10 +5,9 @@ import static org.mockito.Mockito.when;
 
 import com.safepath.backend.auth.FirebaseTokenService;
 import com.safepath.backend.config.FirebaseConfig;
-import com.safepath.backend.session.service.GuardianPermissionService;
+import com.safepath.backend.guardian.service.GuardianRegistrationService;
 import com.safepath.backend.session.service.SafeReturnSessionService;
 import com.safepath.backend.session.store.SessionChannelStore;
-import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.user.UserService;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -33,7 +32,7 @@ class WebSocketLocationIntegrationTest {
     @LocalServerPort int port;
     @Autowired SafeReturnSessionService sessions;
     @Autowired SessionChannelStore mappings;
-    @MockitoBean GuardianPermissionService permissions;
+    @MockitoBean GuardianRegistrationService permissions;
     @MockitoBean FirebaseConfig firebaseConfig;
     @MockitoBean FirebaseTokenService tokens;
     @MockitoBean UserService users;
@@ -44,8 +43,8 @@ class WebSocketLocationIntegrationTest {
         when(tokens.verifyIdToken("guardian-token")).thenReturn("guardian-uid");
         when(users.findUserIdByFirebaseUid("user-uid")).thenReturn(Optional.of(1L));
         when(users.findUserIdByFirebaseUid("guardian-uid")).thenReturn(Optional.of(2L));
-        when(permissions.hasAcceptedRelationship(1L, 2L)).thenReturn(true);
-        when(permissions.hasPermission(1L, 2L, MonitoringPermissionType.LOCATION)).thenReturn(true);
+
+        when(permissions.hasGuardianPermission(1L, 2L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(true);
         var session = sessions.startSession(1L, List.of(2L));
         String channelId = mappings.findBySessionId(session.id()).orElseThrow();
 

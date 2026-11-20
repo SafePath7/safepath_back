@@ -1,5 +1,8 @@
 package com.safepath.backend.session.service;
 
+import com.safepath.backend.monitoring.service.GuardianMonitoringService;
+import com.safepath.backend.monitoring.service.GuardianMonitoringQueryService;
+
 import com.safepath.backend.guardian.entity.GuardianRegistration;
 import com.safepath.backend.guardian.entity.RegistrationStatus;
 import com.safepath.backend.guardian.repository.GuardianRegistrationRepository;
@@ -43,10 +46,10 @@ class SessionChannelBoundaryTest {
 	private final GuardianRegistrationRepository repository = mock(GuardianRegistrationRepository.class);
 	private final GuardianRegistrationService registrations = new GuardianRegistrationService(
 			repository, mock(GuardianRequestNotifier.class));
-	private final GuardianPermissionService permissions = new GuardianPermissionAdapterService(registrations);
-	private final GuardianSelectionService selection = new GuardianSelectionService(sessions, selected, permissions);
+	private final GuardianRegistrationService permissions = registrations;
+
 	private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(
-			sessions, selected, mappings, channels, selection, mock(com.safepath.backend.notification.NotificationService.class));
+			sessions, selected, mappings, channels, permissions, mock(com.safepath.backend.notification.NotificationService.class));
 	private final GuardianMonitoringService monitoring = new GuardianMonitoringService(
 			sessions, permissions, selected, mappings);
 	private final GuardianRegistration registration = BeanUtils.instantiateClass(GuardianRegistration.class);

@@ -1,7 +1,7 @@
 package com.safepath.backend.session.service;
 
+import com.safepath.backend.guardian.service.GuardianRegistrationService;
 import com.safepath.backend.session.model.ActiveSession;
-import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
 import org.junit.jupiter.api.Test;
@@ -25,8 +25,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class GuardianSelectionServiceTest {
     private final ActiveSessionStore sessions = new ActiveSessionStore();
     private final SelectedGuardianStore selected = new SelectedGuardianStore(sessions);
-    private final GuardianPermissionService permissions = mock(GuardianPermissionService.class);
-    private final GuardianSelectionService selection = new GuardianSelectionService(sessions, selected, permissions);
+    private final GuardianRegistrationService permissions = mock(GuardianRegistrationService.class);
+    private final GuardianSelectionService selection = new GuardianSelectionService(sessions, selected);
+    private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(sessions, selected, new com.safepath.backend.session.store.SessionChannelStore(), new com.safepath.backend.websocket.InMemoryChannelRegistry(), permissions, mock(com.safepath.backend.notification.NotificationService.class));
     private final ActiveSession session = new ActiveSession(UUID.randomUUID(), 42L, Instant.now());
 
     GuardianSelectionServiceTest() {
@@ -35,11 +36,10 @@ class GuardianSelectionServiceTest {
 
     @Test
     void validatesAcceptedLocationGuardiansAndNormalizesDuplicates() {
-        when(permissions.hasAcceptedRelationship(42L, 43L)).thenReturn(true);
-        when(permissions.hasPermission(42L, 43L, MonitoringPermissionType.LOCATION)).thenReturn(true);
-        assertEquals(Set.of(43L), selection.validateForStart(42L, List.of(43L, 43L)));
-        verify(permissions, times(1)).hasAcceptedRelationship(42L, 43L);
-        verify(permissions, times(1)).hasPermission(42L, 43L, MonitoringPermissionType.LOCATION);
+
+        when(permissions.hasGuardianPermission(42L, 43L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(true);
+        assertEquals(Set.of(43L), lifecycle.validateForStart(42L, List.of(43L, 43L)));
+        verify(permissions, times(1)).hasGuardianPermission(42L, 43L, com.safepath.backend.guardian.entity.PermissionType.LOCATION);
         assertTrue(selected.findBySessionId(session.id()).isEmpty());
     }
 
@@ -63,14 +63,14 @@ class GuardianSelectionServiceTest {
 
     @Test
     void selfAndUnacceptedGuardianAreRejected() {
-        assertThrows(AccessDeniedException.class, () -> selection.validateForStart(42L, List.of(42L)));
-        assertThrows(AccessDeniedException.class, () -> selection.validateForStart(42L, List.of(43L)));
+        assertThrows(AccessDeniedException.class, () -> lifecycle.validateForStart(42L, List.of(42L)));
+        assertThrows(AccessDeniedException.class, () -> lifecycle.validateForStart(42L, List.of(43L)));
     }
 
     @Test
     void lookupFailureIsPropagatedWithoutMutation() {
-        when(permissions.hasAcceptedRelationship(42L, 43L)).thenThrow(new IllegalStateException("Unavailable"));
-        assertThrows(IllegalStateException.class, () -> selection.validateForStart(42L, List.of(43L)));
+        when(permissions.hasGuardianPermission(42L, 43L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenThrow(new IllegalStateException("Unavailable"));
+        assertThrows(IllegalStateException.class, () -> lifecycle.validateForStart(42L, List.of(43L)));
         assertTrue(selected.findBySessionId(session.id()).isEmpty());
     }
 
@@ -84,10 +84,10 @@ class GuardianSelectionServiceTest {
 
     @Test
     void rejectsInvalidGuardianAndOwnerArguments() {
-        assertThrows(IllegalArgumentException.class, () -> selection.validateForStart(42L, null));
-        assertThrows(IllegalArgumentException.class, () -> selection.validateForStart(42L, List.of()));
-        assertThrows(IllegalArgumentException.class, () -> selection.validateForStart(null, List.of(43L)));
-        assertThrows(IllegalArgumentException.class, () -> selection.validateForStart(42L, java.util.Arrays.asList(43L, null)));
+        assertThrows(IllegalArgumentException.class, () -> lifecycle.validateForStart(42L, null));
+        assertThrows(IllegalArgumentException.class, () -> lifecycle.validateForStart(42L, List.of()));
+        assertThrows(IllegalArgumentException.class, () -> lifecycle.validateForStart(null, List.of(43L)));
+        assertThrows(IllegalArgumentException.class, () -> lifecycle.validateForStart(42L, java.util.Arrays.asList(43L, null)));
         for (Long id : new Long[]{null, 0L, -1L}) {
             assertThrows(IllegalArgumentException.class, () -> selection.selectGuardian(session.id(), 42L, id));
             assertThrows(IllegalArgumentException.class, () -> selection.deselectGuardian(session.id(), 42L, id));
@@ -100,8 +100,8 @@ class GuardianSelectionServiceTest {
     void ownerSelectionSnapshotIsImmutableAndDoesNotGrantLocationPermission() {
         selected.save(session.id(), Set.of(43L));
         assertThrows(UnsupportedOperationException.class, () -> selection.getSelectedGuardians(session.id(), 42L).add(44L));
-        when(permissions.hasAcceptedRelationship(42L, 43L)).thenReturn(true);
-        when(permissions.hasPermission(42L, 43L, MonitoringPermissionType.STATUS)).thenReturn(true);
-        assertThrows(AccessDeniedException.class, () -> selection.validateForStart(42L, List.of(43L)));
+
+
+        assertThrows(AccessDeniedException.class, () -> lifecycle.validateForStart(42L, List.of(43L)));
     }
 }

@@ -1,5 +1,6 @@
 package com.safepath.backend.session.service;
 
+import com.safepath.backend.guardian.service.GuardianRegistrationService;
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
@@ -31,14 +32,14 @@ class SafeReturnSessionServiceTest {
 	private ActiveSessionStore store;
 	private SafeReturnSessionService service;
 	private SelectedGuardianStore selectedGuardianStore;
-	private GuardianPermissionService permissions;
+	private GuardianRegistrationService permissions;
 
 	@BeforeEach
 	void setUp() {
 		store = new ActiveSessionStore();
 		selectedGuardianStore = new SelectedGuardianStore(store);
-		permissions = org.mockito.Mockito.mock(GuardianPermissionService.class);
-		service = new SafeReturnSessionService(store, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), new GuardianSelectionService(store, selectedGuardianStore, permissions), org.mockito.Mockito.mock(com.safepath.backend.notification.NotificationService.class));
+		permissions = org.mockito.Mockito.mock(GuardianRegistrationService.class);
+		service = new SafeReturnSessionService(store, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), permissions, org.mockito.Mockito.mock(com.safepath.backend.notification.NotificationService.class));
 	}
 
 	@Test
@@ -312,9 +313,8 @@ class SafeReturnSessionServiceTest {
 	private ActiveSession startSession(Long userId) {
 		if (userId != null && userId > 0) {
 			Long guardianId = userId + 1000;
-			org.mockito.Mockito.when(permissions.hasAcceptedRelationship(userId, guardianId)).thenReturn(true);
-			org.mockito.Mockito.when(permissions.hasPermission(userId, guardianId,
-					com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(true);
+
+			org.mockito.Mockito.when(permissions.hasGuardianPermission(userId, guardianId, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(true);
 			return service.startSession(userId, List.of(guardianId));
 		}
 		return service.startSession(userId, List.of(1001L));

@@ -1,5 +1,8 @@
 package com.safepath.backend.session.service;
 
+import com.safepath.backend.monitoring.service.GuardianMonitoringService;
+import com.safepath.backend.monitoring.service.GuardianMonitoringQueryService;
+
 import com.safepath.backend.guardian.entity.GuardianRegistration;
 import com.safepath.backend.guardian.entity.RegistrationStatus;
 import com.safepath.backend.guardian.repository.GuardianRegistrationRepository;
@@ -31,23 +34,24 @@ class GuardianPermissionBeanTest {
 			context.registerBean(com.safepath.backend.notification.NotificationService.class,
 					() -> mock(com.safepath.backend.notification.NotificationService.class));
 			context.register(GuardianRegistrationService.class, InMemoryChannelRegistry.class);
-			context.scan("com.safepath.backend.session.service", "com.safepath.backend.session.store");
+			context.scan("com.safepath.backend.session.service", "com.safepath.backend.session.store",
+					"com.safepath.backend.monitoring.service");
 			context.refresh();
-			assertEquals(1, context.getBeansOfType(GuardianPermissionService.class).size());
-			assertInstanceOf(GuardianPermissionAdapterService.class, context.getBean(GuardianPermissionService.class));
+
+
 			assertEquals(1, context.getBeansOfType(GuardianMonitoringQueryService.class).size());
 			var lifecycle = context.getBean(SafeReturnSessionService.class);
-			var selection = context.getBean(GuardianSelectionService.class);
+
 			var monitoring = context.getBean(GuardianMonitoringService.class);
 
 			when(repository.findByUserIdAndGuardianId(42L, 43L)).thenReturn(Optional.empty());
-			assertThrows(AccessDeniedException.class, () -> selection.validateForStart(42L, java.util.List.of(43L)));
+			assertThrows(AccessDeniedException.class, () -> lifecycle.validateForStart(42L, java.util.List.of(43L)));
 
 			GuardianRegistration registration = BeanUtils.instantiateClass(GuardianRegistration.class);
 			registration.changeStatus(RegistrationStatus.PENDING);
 			registration.changePermissions(true, true, false);
 			when(repository.findByUserIdAndGuardianId(42L, 43L)).thenReturn(Optional.of(registration));
-			assertThrows(AccessDeniedException.class, () -> selection.validateForStart(42L, java.util.List.of(43L)));
+			assertThrows(AccessDeniedException.class, () -> lifecycle.validateForStart(42L, java.util.List.of(43L)));
 			registration.changeStatus(RegistrationStatus.ACCEPTED);
 			var session = lifecycle.startSession(42L, java.util.List.of(43L));
 			assertEquals(session, monitoring.getMonitoringStatus(session.id(), 43L));

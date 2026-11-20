@@ -1,7 +1,8 @@
-package com.safepath.backend.session.service;
+package com.safepath.backend.monitoring.service;
 
+import com.safepath.backend.guardian.service.GuardianRegistrationService;
+import com.safepath.backend.guardian.entity.PermissionType;
 import com.safepath.backend.session.model.ActiveSession;
-import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
 import com.safepath.backend.session.store.SessionChannelStore;
@@ -16,13 +17,13 @@ import java.util.UUID;
 public class GuardianMonitoringService {
 
 	private final ActiveSessionStore activeSessionStore;
-	private final GuardianPermissionService guardianPermissionService;
+	private final GuardianRegistrationService guardianPermissionService;
 	private final SelectedGuardianStore selectedGuardianStore;
 	private final SessionChannelStore sessionChannelStore;
 
 	public GuardianMonitoringService(
 			ActiveSessionStore activeSessionStore,
-			GuardianPermissionService guardianPermissionService,
+			GuardianRegistrationService guardianPermissionService,
 			SelectedGuardianStore selectedGuardianStore,
 			SessionChannelStore sessionChannelStore) {
 		this.activeSessionStore = Objects.requireNonNull(activeSessionStore);
@@ -40,7 +41,7 @@ public class GuardianMonitoringService {
 			ActiveSession session = activeSessionStore.findById(sessionId)
 					.orElseThrow(() -> new NoSuchElementException("Active session not found"));
 			if (!session.userId().equals(requesterId)) {
-				validateMonitoringPermission(sessionId, requesterId, MonitoringPermissionType.LOCATION);
+				validateMonitoringPermission(sessionId, requesterId);
 			}
 			return sessionChannelStore.findBySessionId(sessionId)
 					.orElseThrow(() -> new NoSuchElementException("Session channel not found"));
@@ -61,7 +62,7 @@ public class GuardianMonitoringService {
 			if (sessionChannelStore.findBySessionId(sessionId).filter(channelId::equals).isEmpty()) {
 				throw new AccessDeniedException("Session channel mapping does not match");
 			}
-			return validateMonitoringPermission(sessionId, guardianId, MonitoringPermissionType.LOCATION);
+			return validateMonitoringPermission(sessionId, guardianId);
 		}
 	}
 
@@ -86,20 +87,17 @@ public class GuardianMonitoringService {
 	}
 
 	public ActiveSession getMonitoringStatus(UUID sessionId, Long guardianId) {
-		return validateMonitoringPermission(sessionId, guardianId, MonitoringPermissionType.LOCATION);
+		return validateMonitoringPermission(sessionId, guardianId);
 	}
 
 	/** guardianId must be resolved server-side from the authenticated Firebase principal. */
 	public ActiveSession validateMonitoringPermission(
-			UUID sessionId, Long guardianId, MonitoringPermissionType permissionType) {
+			UUID sessionId, Long guardianId) {
 		if (sessionId == null) {
 			throw new IllegalArgumentException("sessionId must not be null");
 		}
 		if (guardianId == null || guardianId <= 0) {
 			throw new IllegalArgumentException("guardianId must be a positive number");
-		}
-		if (permissionType == null) {
-			throw new IllegalArgumentException("permissionType must not be null");
 		}
 
 		ActiveSession session = activeSessionStore.findById(sessionId)
@@ -107,10 +105,7 @@ public class GuardianMonitoringService {
 		if (session.userId().equals(guardianId)) {
 			throw new AccessDeniedException("Monitoring access denied");
 		}
-		if (!guardianPermissionService.hasAcceptedRelationship(session.userId(), guardianId)) {
-			throw new AccessDeniedException("Monitoring access denied");
-		}
-		if (!guardianPermissionService.hasPermission(session.userId(), guardianId, permissionType)) {
+		if (!guardianPermissionService.hasGuardianPermission(session.userId(), guardianId, PermissionType.LOCATION)) {
 			throw new AccessDeniedException("Monitoring access denied");
 		}
 		if (!selectedGuardianStore.isSelectedGuardian(sessionId, guardianId)) {

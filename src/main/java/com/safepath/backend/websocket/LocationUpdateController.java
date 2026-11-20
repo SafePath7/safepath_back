@@ -2,6 +2,7 @@ package com.safepath.backend.websocket;
 
 import com.safepath.backend.websocket.dto.LocationUpdateRequest;
 import com.safepath.backend.websocket.dto.LocationUpdateResponse;
+import com.safepath.backend.session.service.SafeReturnSessionService;
 import jakarta.validation.Valid;
 import java.time.Instant;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -13,9 +14,11 @@ import org.springframework.stereotype.Controller;
 @Controller
 public class LocationUpdateController {
     private final InMemoryChannelRegistry channelRegistry;
+    private final SafeReturnSessionService sessionService;
 
-    public LocationUpdateController(InMemoryChannelRegistry channelRegistry) {
+    public LocationUpdateController(InMemoryChannelRegistry channelRegistry, SafeReturnSessionService sessionService) {
         this.channelRegistry = channelRegistry;
+        this.sessionService = sessionService;
     }
 
     @MessageMapping("/connections/{connectionId}/locations")
@@ -32,6 +35,7 @@ public class LocationUpdateController {
         if (!channelRegistry.isLocationPublisher(connectionId, participantId)) {
             throw new IllegalArgumentException("Only the channel user may publish location updates");
         }
+        var session = sessionService.getSessionForOwnerChannel(connectionId, participantId);
         return new LocationUpdateResponse(
                 connectionId,
                 String.valueOf(participantId),
@@ -40,6 +44,6 @@ public class LocationUpdateController {
                 request.accuracyMeters(),
                 request.capturedAt(),
                 Instant.now(),
-                "UNKNOWN");
+                session.safetyStatus());
     }
 }

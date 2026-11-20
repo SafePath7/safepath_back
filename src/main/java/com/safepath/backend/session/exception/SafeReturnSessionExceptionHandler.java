@@ -1,7 +1,7 @@
 package com.safepath.backend.session.exception;
 
 import com.safepath.backend.session.controller.SafeReturnSessionController;
-import com.safepath.backend.session.controller.GuardianMonitoringController;
+import com.safepath.backend.monitoring.controller.GuardianMonitoringController;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import com.safepath.backend.session.dto.SessionApiErrorResponse;
 import org.slf4j.Logger;

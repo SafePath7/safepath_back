@@ -1,5 +1,7 @@
 package com.safepath.backend.session.controller;
 
+import com.safepath.backend.monitoring.controller.GuardianMonitoringController;
+
 import com.safepath.backend.auth.FirebaseAuthenticationFilter;
 import com.safepath.backend.auth.FirebaseTokenService;
 import com.safepath.backend.config.SecurityConfig;
@@ -67,8 +69,8 @@ class SafeReturnSessionControllerTest {
 				.andExpect(jsonPath("$.destinationName").value("CU 대구신당점"));
 		mockMvc.perform(get("/api/guardian/monitoring/sessions/" + id + "/route").header("Authorization", bearer("guardian-3")))
 				.andExpect(status().isForbidden());
-		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
-		when(permissions.hasPermission(42L, 2L, com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(false);
+		var permissions = context.getBean(com.safepath.backend.guardian.service.GuardianRegistrationService.class);
+		when(permissions.hasGuardianPermission(42L, 2L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(false);
 		mockMvc.perform(get("/api/guardian/monitoring/sessions/" + id + "/route").header("Authorization", bearer("guardian-2")))
 				.andExpect(status().isForbidden());
 	}
@@ -118,13 +120,11 @@ class SafeReturnSessionControllerTest {
 		when(tokenService.verifyIdToken(USER_2_TOKEN)).thenReturn(USER_2_UID);
 		when(userService.findUserIdByFirebaseUid(USER_1_UID)).thenReturn(Optional.of(42L));
 		when(userService.findUserIdByFirebaseUid(USER_2_UID)).thenReturn(Optional.of(43L));
-		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
+		var permissions = context.getBean(com.safepath.backend.guardian.service.GuardianRegistrationService.class);
 		for (Long guardianId : java.util.List.of(2L, 3L)) {
-			when(permissions.hasAcceptedRelationship(42L, guardianId)).thenReturn(true);
-			when(permissions.hasPermission(42L, guardianId,
-					com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(true);
-			when(permissions.hasPermission(42L, guardianId,
-					com.safepath.backend.session.model.MonitoringPermissionType.STATUS)).thenReturn(true);
+
+			when(permissions.hasGuardianPermission(42L, guardianId, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(true);
+
 			when(tokenService.verifyIdToken("guardian-" + guardianId)).thenReturn("guardian-uid-" + guardianId);
 			when(userService.findUserIdByFirebaseUid("guardian-uid-" + guardianId)).thenReturn(Optional.of(guardianId));
 		}
@@ -295,9 +295,8 @@ class SafeReturnSessionControllerTest {
 
 	@Test
 	void rejectsAcceptedGuardianWithoutLocationPermissionWithSelectionError() throws Exception {
-		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
-		when(permissions.hasPermission(42L, 2L,
-				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(false);
+		var permissions = context.getBean(com.safepath.backend.guardian.service.GuardianRegistrationService.class);
+		when(permissions.hasGuardianPermission(42L, 2L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(false);
 		mockMvc.perform(post("/api/safe-return/sessions").header("Authorization", bearer(USER_1_TOKEN))
 				.contentType(MediaType.APPLICATION_JSON).content("{\"guardianIds\":[2]}"))
 				.andExpect(status().isForbidden())
@@ -325,20 +324,16 @@ class SafeReturnSessionControllerTest {
 	void monitoringRequiresAuthenticatedSelectedGuardianAndLocationPermission() throws Exception {
 		UUID sessionId = startSession(USER_1_TOKEN);
 		String base = "/api/guardian/monitoring/sessions/" + sessionId;
-		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
-		when(permissions.hasAcceptedRelationship(42L, 43L)).thenReturn(true);
-		when(permissions.hasPermission(42L, 43L,
-				com.safepath.backend.session.model.MonitoringPermissionType.STATUS)).thenReturn(true);
-		when(permissions.hasPermission(42L, 43L,
-				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(true);
-		when(permissions.hasPermission(42L, 2L,
-				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(false);
+		var permissions = context.getBean(com.safepath.backend.guardian.service.GuardianRegistrationService.class);
+
+
+		when(permissions.hasGuardianPermission(42L, 43L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(true);
+		when(permissions.hasGuardianPermission(42L, 2L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(false);
 		mockMvc.perform(get(base + "/channel").header("Authorization", bearer("guardian-2")))
 				.andExpect(status().isOk());
 		mockMvc.perform(get(base + "/status").header("Authorization", bearer("guardian-2")))
 				.andExpect(status().isForbidden());
-		when(permissions.hasPermission(42L, 3L,
-				com.safepath.backend.session.model.MonitoringPermissionType.STATUS)).thenReturn(false);
+
 		mockMvc.perform(get(base + "/status").header("Authorization", bearer("guardian-3")))
 				.andExpect(status().isOk());
 		mockMvc.perform(get(base + "/channel").header("Authorization", bearer("guardian-3")))
@@ -382,8 +377,8 @@ class SafeReturnSessionControllerTest {
 	@Test
 	void channelLookupKeepsSelectedGuardianAfterRelationshipRevocation() throws Exception {
 		UUID sessionId = startSession(USER_1_TOKEN);
-		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
-		when(permissions.hasAcceptedRelationship(42L, 2L)).thenReturn(false);
+		var permissions = context.getBean(com.safepath.backend.guardian.service.GuardianRegistrationService.class);
+		when(permissions.hasGuardianPermission(42L, 2L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(false);
 		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.channelId").isNotEmpty());
 	}
@@ -391,9 +386,8 @@ class SafeReturnSessionControllerTest {
 	@Test
 	void channelLookupKeepsSelectedGuardianAfterLocationPermissionRevocation() throws Exception {
 		UUID sessionId = startSession(USER_1_TOKEN);
-		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
-		when(permissions.hasPermission(42L, 2L,
-				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(false);
+		var permissions = context.getBean(com.safepath.backend.guardian.service.GuardianRegistrationService.class);
+		when(permissions.hasGuardianPermission(42L, 2L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(false);
 		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.channelId").isNotEmpty());
 	}
@@ -401,10 +395,9 @@ class SafeReturnSessionControllerTest {
 	@Test
 	void acceptedButUnselectedGuardianCannotSpoofSelectedGuardianId() throws Exception {
 		UUID sessionId = startSession(USER_1_TOKEN);
-		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
-		when(permissions.hasAcceptedRelationship(42L, 43L)).thenReturn(true);
-		when(permissions.hasPermission(42L, 43L,
-				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(true);
+		var permissions = context.getBean(com.safepath.backend.guardian.service.GuardianRegistrationService.class);
+
+		when(permissions.hasGuardianPermission(42L, 43L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(true);
 		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer(USER_2_TOKEN))
 				.param("guardianId", "2").header("X-User-Id", "2"))
 				.andExpect(status().isForbidden());
@@ -461,9 +454,8 @@ class SafeReturnSessionControllerTest {
 	@Test
 	void channelLookupDoesNotDependOnCurrentGuardianPermissionLookup() throws Exception {
 		UUID sessionId = startSession(USER_1_TOKEN);
-		var permissions = context.getBean(com.safepath.backend.session.service.GuardianPermissionService.class);
-		when(permissions.hasPermission(42L, 2L,
-				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION))
+		var permissions = context.getBean(com.safepath.backend.guardian.service.GuardianRegistrationService.class);
+		when(permissions.hasGuardianPermission(42L, 2L, com.safepath.backend.guardian.entity.PermissionType.LOCATION))
 				.thenThrow(new org.springframework.dao.DataAccessResourceFailureException("Lookup unavailable"));
 		mockMvc.perform(get(channelPath(sessionId)).header("Authorization", bearer("guardian-2")))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.channelId").isNotEmpty());
@@ -500,8 +492,8 @@ class SafeReturnSessionControllerTest {
 			FirebaseAuthenticationFilter.class,
 			SafeReturnSessionController.class,
             GuardianMonitoringController.class,
-            com.safepath.backend.session.service.GuardianMonitoringService.class,
-            com.safepath.backend.session.service.GuardianMonitoringQueryService.class,
+            com.safepath.backend.monitoring.service.GuardianMonitoringService.class,
+            com.safepath.backend.monitoring.service.GuardianMonitoringQueryService.class,
 			SafeReturnSessionExceptionHandler.class,
 			ActiveSessionStore.class,
 			SelectedGuardianStore.class,
@@ -519,8 +511,8 @@ class SafeReturnSessionControllerTest {
 		}
 
 		@Bean
-		com.safepath.backend.session.service.GuardianPermissionService guardianPermissionService() {
-			return mock(com.safepath.backend.session.service.GuardianPermissionService.class);
+		com.safepath.backend.guardian.service.GuardianRegistrationService guardianPermissionService() {
+			return mock(com.safepath.backend.guardian.service.GuardianRegistrationService.class);
 		}
 		@Bean
 		InMemoryChannelRegistry channelRegistry() {

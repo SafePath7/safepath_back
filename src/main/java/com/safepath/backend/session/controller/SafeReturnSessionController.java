@@ -3,7 +3,7 @@ package com.safepath.backend.session.controller;
 import com.safepath.backend.session.dto.ActiveSessionResponse;
 import com.safepath.backend.session.dto.StartSessionRequest;
 import com.safepath.backend.session.dto.StartSessionResponse;
-import com.safepath.backend.session.service.GuardianMonitoringService;
+import com.safepath.backend.monitoring.service.GuardianMonitoringService;
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.service.SafeReturnSessionService;
 import com.safepath.backend.user.UserService;

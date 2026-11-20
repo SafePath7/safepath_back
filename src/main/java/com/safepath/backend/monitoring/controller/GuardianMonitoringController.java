@@ -1,8 +1,8 @@
-package com.safepath.backend.session.controller;
+package com.safepath.backend.monitoring.controller;
 
 import com.safepath.backend.session.dto.SelectedRoute;
-import com.safepath.backend.session.dto.MonitoringChannelResponse;
-import com.safepath.backend.session.service.GuardianMonitoringQueryService;
+import com.safepath.backend.monitoring.dto.MonitoringChannelResponse;
+import com.safepath.backend.monitoring.service.GuardianMonitoringQueryService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;

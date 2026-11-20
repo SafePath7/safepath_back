@@ -1,5 +1,6 @@
 package com.safepath.backend.session.service;
 
+import com.safepath.backend.guardian.service.GuardianRegistrationService;
 import com.safepath.backend.session.exception.SessionChannelException;
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.store.ActiveSessionStore;
@@ -34,8 +35,19 @@ class SessionChannelLifecycleTest {
 	private final SelectedGuardianStore guardians = new SelectedGuardianStore(sessions);
 	private final SessionChannelStore mappings = spy(new SessionChannelStore());
 	private final InMemoryChannelRegistry channels = spy(new InMemoryChannelRegistry());
-	private final GuardianPermissionService permissions = org.mockito.Mockito.mock(GuardianPermissionService.class);
-	private final SafeReturnSessionService service = new SafeReturnSessionService(sessions, guardians, mappings, channels, new GuardianSelectionService(sessions, guardians, permissions), org.mockito.Mockito.mock(com.safepath.backend.notification.NotificationService.class));
+	private final GuardianRegistrationService permissions = org.mockito.Mockito.mock(GuardianRegistrationService.class);
+	private final SafeReturnSessionService service = new SafeReturnSessionService(sessions, guardians, mappings, channels, permissions, org.mockito.Mockito.mock(com.safepath.backend.notification.NotificationService.class));
+
+	@Test
+	void channelLookupReturnsOnlyActiveSessionForItsOwner() {
+		ActiveSession session = startSession(42L);
+		String channelId = mappings.findBySessionId(session.id()).orElseThrow();
+		assertSame(session, service.getSessionForOwnerChannel(channelId, 42L));
+		assertEquals(com.safepath.backend.session.model.SafetyStatus.UNKNOWN, session.safetyStatus());
+		assertThrows(SecurityException.class, () -> service.getSessionForOwnerChannel(channelId, 43L));
+		service.endSession(session.id(), 42L);
+		assertThrows(java.util.NoSuchElementException.class, () -> service.getSessionForOwnerChannel(channelId, 42L));
+	}
 
 	@Test
 	void startsGuardianChannelAndEndsItWithoutAffectingAnotherSession() {
@@ -183,9 +195,8 @@ class SessionChannelLifecycleTest {
 
 	private ActiveSession startSession(Long userId) {
 		Long guardianId = userId + 1000;
-		org.mockito.Mockito.when(permissions.hasAcceptedRelationship(userId, guardianId)).thenReturn(true);
-		org.mockito.Mockito.when(permissions.hasPermission(userId, guardianId,
-				com.safepath.backend.session.model.MonitoringPermissionType.LOCATION)).thenReturn(true);
+
+		org.mockito.Mockito.when(permissions.hasGuardianPermission(userId, guardianId, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(true);
 		return service.startSession(userId, List.of(guardianId));
 	}
 }

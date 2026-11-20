@@ -1,7 +1,7 @@
 package com.safepath.backend.session.service;
 
+import com.safepath.backend.guardian.service.GuardianRegistrationService;
 import com.safepath.backend.session.exception.SessionChannelException;
-import com.safepath.backend.session.model.MonitoringPermissionType;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
 import com.safepath.backend.session.store.SessionChannelStore;
@@ -38,18 +38,18 @@ class GuardianSessionStartTest {
 	private final SelectedGuardianStore selected = spy(new SelectedGuardianStore(sessions));
 	private final SessionChannelStore mappings = spy(new SessionChannelStore());
 	private final InMemoryChannelRegistry channels = spy(new InMemoryChannelRegistry());
-	private final GuardianPermissionService permissions = mock(GuardianPermissionService.class);
-	private final GuardianSelectionService selection = new GuardianSelectionService(sessions, selected, permissions);
+	private final GuardianRegistrationService permissions = mock(GuardianRegistrationService.class);
+
 	private final com.safepath.backend.notification.NotificationService notifications = mock(com.safepath.backend.notification.NotificationService.class);
 	private final SafeReturnSessionService service = new SafeReturnSessionService(
-			sessions, selected, mappings, channels, selection, notifications);
+			sessions, selected, mappings, channels, permissions, notifications);
 
 	@Test
 	void oneGuardianStartsWithMatchingSelectionChannelAndMapping() {
 		allow(43L);
 		var session = service.startSession(42L, List.of(43L));
 		String channel = mappings.findBySessionId(session.id()).orElseThrow();
-		assertEquals(Set.of(43L), selection.getSelectedGuardians(session.id(), 42L));
+		assertEquals(Set.of(43L), new GuardianSelectionService(sessions, selected).getSelectedGuardians(session.id(), 42L));
 		assertTrue(channels.isParticipant(channel, 42L));
 		assertTrue(channels.isParticipant(channel, 43L));
 		assertFalse(channels.isLocationPublisher(channel, 43L));
@@ -66,7 +66,7 @@ class GuardianSessionStartTest {
 		assertEquals(Set.of(43L, 44L), selected.findBySessionId(session.id()));
 		assertTrue(channels.isParticipant(channel, 43L));
 		assertTrue(channels.isParticipant(channel, 44L));
-		verify(permissions, times(1)).hasAcceptedRelationship(42L, 43L);
+		verify(permissions, times(1)).hasGuardianPermission(42L, 43L, com.safepath.backend.guardian.entity.PermissionType.LOCATION);
 		verify(channels, times(1)).open(42L, Set.of(43L, 44L));
 	}
 
@@ -87,9 +87,9 @@ class GuardianSessionStartTest {
 	}
 
 	@Test
-	void statusOnlyGuardianCannotStart() {
-		when(permissions.hasAcceptedRelationship(42L, 43L)).thenReturn(true);
-		when(permissions.hasPermission(42L, 43L, MonitoringPermissionType.STATUS)).thenReturn(true);
+	void guardianWithoutLocationPermissionCannotStart() {
+
+
 		assertThrows(AccessDeniedException.class, () -> service.startSession(42L, List.of(43L)));
 		assertNoResources();
 	}
@@ -103,7 +103,7 @@ class GuardianSessionStartTest {
 
 	@Test
 	void lookupFailureDoesNotCreateResources() {
-		when(permissions.hasAcceptedRelationship(42L, 43L)).thenThrow(new IllegalStateException("Unavailable"));
+		when(permissions.hasGuardianPermission(42L, 43L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenThrow(new IllegalStateException("Unavailable"));
 		assertThrows(IllegalStateException.class, () -> service.startSession(42L, List.of(43L)));
 		assertNoResources();
 	}
@@ -273,8 +273,8 @@ class GuardianSessionStartTest {
 	}
 
 	private void allowFor(Long ownerId, Long guardianId) {
-		when(permissions.hasAcceptedRelationship(ownerId, guardianId)).thenReturn(true);
-		when(permissions.hasPermission(ownerId, guardianId, MonitoringPermissionType.LOCATION)).thenReturn(true);
+
+		when(permissions.hasGuardianPermission(ownerId, guardianId, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(true);
 	}
 
 	private void assertNoResources() {
