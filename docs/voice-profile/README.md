@@ -149,6 +149,13 @@ Controller 테스트는 실제 Spring Security 필터 체인과 `CurrentUser`를
 - 완료 · Firebase 인증 기반 `GET /api/voice-profiles/me`
 - 완료 · 로컬 Postman TEST 1~6 통과. 토큰 없음·잘못된 토큰은 401, 프로필 미등록·등록은 각각 200, 로컬 미가입은 404를 확인했다. 다른 회원의 ID를 쿼리에 넣어도 인증된 본인의 등록 상태만 반환했다.
 - 후속 작업 · POST 생성, PUT 갱신, DELETE 삭제 REST API
-- 후속 작업 · AI 음성 특징 추출, 음성 파일 저장소 연동, Android 통합 테스트
+- 후속 작업 · AI 음성 특징 추출, 음성 파일 저장소 연동, Android 및 AI 통합 테스트
+
+### 별도 개발 영역 — AI 위험 확정 및 세션 저장
+
+- 후속 작업 · AI 위험 확정 이벤트 연동
+- 후속 작업 · 위험 확정 시 메모리 안전귀가 세션을 PostgreSQL에 저장
+
+위 두 작업은 Voice Profile 등록·갱신·삭제 및 음성 특징 추출과 별도로 개발한다.
 
 후속 REST API와 AI 연동 완료 후 `develop` 대상 최종 PR 하나로 정리할 예정이다.
