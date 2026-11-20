@@ -8,6 +8,10 @@ on:
     branches:
       - develop
 
+concurrency:
+  group: backend-ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -163,3 +167,98 @@ jobs:
             --instance-id i-0967f249082d796da \
             --query '{Status:Status,Output:StandardOutputContent}' \
             --output json
+
+      - name: EC2에 백엔드 배포
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # 오래된 워크플로가 최신 develop 커밋을 덮어쓰지 않도록 확인
+          LATEST_SHA=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" \
+            --jq '.object.sha')
+
+          if [ "$GITHUB_SHA" != "$LATEST_SHA" ]; then
+            echo "현재 실행은 최신 develop 커밋이 아닙니다."
+            echo "현재 실행: $GITHUB_SHA"
+            echo "최신 커밋: $LATEST_SHA"
+            exit 1
+          fi
+
+          # EC2에서 S3의 배포 스크립트를 가져와 실행
+          REMOTE_SCRIPT=$(cat <<'EOF'
+          set -eu
+
+          TEMP_DIR=$(mktemp -d)
+          trap 'rm -rf "$TEMP_DIR"' EXIT
+
+          aws s3 cp \
+            "s3://safepath-dev-risk-media-kr/deploy/$COMMIT_SHA/deploy-backend.sh" \
+            "$TEMP_DIR/deploy-backend.sh" \
+            --region ap-northeast-2
+
+          bash -n "$TEMP_DIR/deploy-backend.sh"
+          bash "$TEMP_DIR/deploy-backend.sh" "$COMMIT_SHA"
+          EOF
+          )
+
+          # SSM에 전달할 명령을 JSON으로 생성
+          PARAMETERS=$(jq -n \
+            --arg sha "$GITHUB_SHA" \
+            --arg script "$REMOTE_SCRIPT" \
+            '{
+              commands: [("COMMIT_SHA=" + $sha + "\n" + $script)],
+              executionTimeout: ["1200"]
+            }')
+
+          COMMAND_ID=$(aws ssm send-command \
+            --region ap-northeast-2 \
+            --instance-ids i-0967f249082d796da \
+            --document-name AWS-RunShellScript \
+            --parameters "$PARAMETERS" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "배포 SSM 명령 ID: $COMMAND_ID"
+
+          # SSM 명령이 완료될 때까지 최대 약 20분 동안 확인
+          for attempt in $(seq 1 240); do
+            if RESULT=$(aws ssm get-command-invocation \
+              --region ap-northeast-2 \
+              --command-id "$COMMAND_ID" \
+              --instance-id i-0967f249082d796da \
+              --output json 2>ssm-error.txt); then
+
+              STATUS=$(echo "$RESULT" | jq -r '.Status')
+              echo "SSM 상태: $STATUS ($attempt/240)"
+
+              case "$STATUS" in
+                Success)
+                  echo "$RESULT" | jq -r '.StandardOutputContent'
+                  echo "EC2 배포 성공"
+                  exit 0
+                  ;;
+
+                Failed|Cancelled|TimedOut)
+                  echo "$RESULT" | jq -r '.StandardOutputContent'
+                  echo "$RESULT" | jq -r '.StandardErrorContent' >&2
+                  echo "EC2 배포 실패: $STATUS" >&2
+                  exit 1
+                  ;;
+              esac
+            else
+              # 명령 전송 직후에는 실행 결과가 아직 생성되지 않을 수 있음
+              if ! grep -q 'InvocationDoesNotExist' ssm-error.txt; then
+                cat ssm-error.txt >&2
+                exit 1
+              fi
+
+              echo "SSM 실행 결과 생성 대기 중 ($attempt/240)"
+            fi
+
+            sleep 5
+          done
+
+          echo "SSM 결과 확인 시간 초과. AWS 콘솔에서 명령 상태를 확인하세요." >&2
+          exit 1
