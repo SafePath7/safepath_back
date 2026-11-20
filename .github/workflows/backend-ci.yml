@@ -61,3 +61,22 @@ jobs:
             build/reports/tests/test/
             build/test-results/test/
           if-no-files-found: warn
+
+  aws-auth-check:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: AWS 역할로 인증
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: AWS 계정 확인
+        run: aws sts get-caller-identity
