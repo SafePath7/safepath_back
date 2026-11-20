@@ -45,9 +45,14 @@ wait_for_health() {
 }
 
 rollback() {
+  # 복구 중 같은 신호가 들어와 함수가 다시 실행되는 것을 방지
+  trap - INT TERM
+
   echo "배포 실패: 이전 JAR로 복구합니다."
 
-  if ! cp -p "$BACKUP_JAR" "$CURRENT_JAR"; then
+  # 임시 파일을 거쳐 이전 JAR로 교체
+  if ! cp -p "$BACKUP_JAR" "$NEW_JAR" ||
+     ! mv -f "$NEW_JAR" "$CURRENT_JAR"; then
     echo "오류: 이전 JAR을 복구하지 못했습니다."
     exit 1
   fi
@@ -63,7 +68,7 @@ rollback() {
     echo "오류: 이전 버전 복구 후에도 정상 응답을 확인하지 못했습니다."
   fi
 
-  # 복구가 성공하더라도 새 버전의 배포는 실패로 기록
+  # 복구가 성공해도 새 버전 배포는 실패로 기록
   exit 1
 }
 
@@ -90,6 +95,9 @@ chmod 644 "$NEW_JAR"
 echo "현재 JAR 백업"
 cp -p "$CURRENT_JAR" "$BACKUP_JAR"
 
+# 교체 중 중단 요청이 오면 이전 버전 복구 시도
+trap 'rollback' INT TERM
+
 echo "새 JAR 반영"
 mv -f "$NEW_JAR" "$CURRENT_JAR"
 
@@ -102,4 +110,5 @@ if ! wait_for_health; then
   rollback
 fi
 
+trap - INT TERM
 echo "배포 및 백엔드 상태 확인 완료: $COMMIT_SHA"
