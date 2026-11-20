@@ -13,9 +13,9 @@ SafePath는 안전귀가를 지원하기 위한 캡스톤 프로젝트입니다.
 
 ## 현재 상태
 
-Spring Boot 기본 골격, DB 프로필, Docker PostgreSQL과 7개 테이블을 정의한 Flyway V1이 준비되어 있습니다. Firebase ID 토큰을 검증하고 DB에서 가입 여부를 확인하는 로그인 API와 관련 테스트가 있습니다.
+Firebase 인증과 회원가입·회원정보 관리, 보호자 연결, 안전귀가 세션, 경로 추천, 위험 이벤트 및 알림 기능이 구현되어 있습니다. 안전귀가 중에는 WebSocket/STOMP로 위치를 공유합니다. 기능별 제약과 상세 계약은 아래 세부 문서를 참고하세요.
 
-회원가입 처리와 안전귀가 및 위험 감지 기능은 아직 구현되지 않았습니다.
+활성 세션과 WebSocket 채널은 서버 메모리에 저장되므로 서버 재시작 시 사라지고 인스턴스 간 공유되지 않습니다. 위험 이벤트용 DB 세션 스냅샷은 일반 세션 종료와 상태가 자동으로 동기화되지 않습니다.
 
 ## 로컬 개발 시작
 
@@ -59,7 +59,7 @@ Authorization: Bearer <Firebase ID 토큰>
 
 Postman에서는 **POST** `http://localhost:8080/api/auth/login`을 선택하고 Body를 **none**으로 설정합니다. 성공 경로를 확인하려면 Authorization을 **Bearer Token**으로 선택하고 Firebase 클라이언트에서 발급받은 ID 토큰을 입력합니다. 토큰 누락을 확인하려면 Authorization을 **No Auth**로 설정하면 401이 반환됩니다.
 
-로그인 POST와 `/ws`, `/ws/**`는 인증 없이 접근할 수 있으며, 나머지 요청에는 인증이 필요합니다. 로그인 POST는 CSRF 검사에서 제외됩니다.
+로그인 POST, 안전시설 조회 `GET /api/safety-facilities`, WebSocket 연결 `/ws`, `/ws/**`는 HTTP 인증 없이 접근할 수 있으며, 나머지 요청에는 인증이 필요합니다. WebSocket은 연결 후 STOMP `CONNECT`에서 Firebase ID 토큰을 검증합니다. 현재 CSRF 검사는 비활성화되어 있습니다.
 
 관련 코드: `FirebaseConfig`는 Firebase를 초기화하고, `FirebaseTokenService`는 토큰을 검증합니다. `AuthController`는 검증된 UID로 가입 여부를 조회하며, `AuthControllerTest`는 Firebase와 DB의 가짜 객체를 사용해 이 흐름을 검사합니다.
 
@@ -97,6 +97,22 @@ SAFEPATH_PHONE_HASH_KEY=<Base64로 인코딩한 별도의 32바이트 해시 키
 
 탈퇴 후 Firebase 계정은 Google 로그인에 계속 사용할 수 있으며, 재로그인하면 `SIGNUP_REQUIRED`를 반환합니다. 위험 이벤트 미디어 파일 또는 음성 원본이 있으면 저장소 삭제 구현이 없으므로 `503`을 반환하고 DB 데이터를 보존합니다. 파일이 없는 경우 세션과 위험 이벤트도 삭제합니다. 이 삭제 정책은 이전 위험 세션 보관 방침과 충돌하므로 배포 전 팀의 정책 확인이 필요합니다.
 
+## 안전귀가 세션과 위치 공유
+
+각 HTTP 요청에는 해당 계정의 Firebase ID 토큰을 Bearer 토큰으로 보냅니다. 사용자와 보호자 ID는 DB의 숫자 ID이며, 세션 ID와 채널 ID는 서로 다른 값입니다.
+
+| 기능 | API | 인증과 응답 |
+| --- | --- | --- |
+| 세션 시작 | `POST /api/safe-return/sessions` | 사용자 토큰, `guardianIds`와 선택적 `selectedRoute` 전달. 성공 시 `201`과 `id`, `startedAt`, `channelId` 반환 |
+| 사용자 세션 상태 | `GET /api/safe-return/sessions/{sessionId}/status` | 소유자 토큰. 성공 시 `200`과 세션 ID, 시작 시각, 선택 경로 반환 |
+| 보호자 활성 세션 조회 | `GET /api/guardian/monitoring/sessions/users/{userId}/active` | 보호자 토큰. LOCATION 권한과 세션의 선택 보호자 여부 확인. 조회 시 `200`과 `id`, `startedAt`, 활성 세션이 없거나 선택되지 않았으면 `204` |
+| 보호자 채널 조회 | `GET /api/guardian/monitoring/sessions/{sessionId}/channel` | 선택된 보호자 토큰. 성공 시 채널 ID 반환 |
+| 세션 종료 | `PATCH /api/safe-return/sessions/{sessionId}/end` | 소유자 토큰. 성공 시 `204` |
+
+사용자와 보호자는 `/ws`에 연결하고 각자의 토큰을 STOMP `CONNECT` 헤더로 전달한 뒤 `/topic/connections/{channelId}/locations`를 구독합니다. 사용자는 `/app/connections/{channelId}/locations`로 위치를 전송합니다. 서버는 인증과 채널 참가 권한을 검사하고 위치를 중계합니다.
+
+종료 시 서버는 채널과 세션 관련 메모리 정보를 정리하고 선택된 보호자에게 종료 FCM 알림을 전송 시도합니다. WebSocket 연결 자체는 강제로 닫지 않으며, 클라이언트는 위치 전송과 구독을 정리하고 연결이 더 이상 필요 없으면 닫습니다. FCM 수신은 보장되지 않습니다.
+
 ## 프로젝트 구조
 
 - `src/main/java/` — Spring Boot 애플리케이션
@@ -117,5 +133,9 @@ SAFEPATH_PHONE_HASH_KEY=<Base64로 인코딩한 별도의 32바이트 해시 키
 - [아키텍처](docs/architecture/README.md)
 - [데이터베이스와 Flyway](docs/database/README.md)
 - [사용자 인증과 회원 API](docs/user/README.md)
+- [안전귀가 세션](docs/safe-return-session/README.md)
+- [보호자 모니터링](docs/guardian-monitoring/README.md)
+- [WebSocket 위치 공유](docs/websocket/README.md)
+- [경로 추천](docs/route/README.ko.md)
 - [Docker 로컬 개발 환경](docs/docker/README.md)
 - [배포 계획](docs/deployment/README.md)
