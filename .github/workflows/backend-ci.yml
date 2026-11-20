@@ -26,6 +26,13 @@ jobs:
           java-version: '21'
           cache: gradle
 
+      - name: 테스트용 환경 설정
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=safepath_ci
+          POSTGRES_PASSWORD=safepath_ci_test_password
+          EOF
+
       - name: 테스트 및 실행용 JAR 빌드
         run: bash ./gradlew build bootJar
 
