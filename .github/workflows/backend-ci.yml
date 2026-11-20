@@ -28,3 +28,13 @@ jobs:
 
       - name: 테스트 및 실행용 JAR 빌드
         run: bash ./gradlew build bootJar
+
+      - name: 테스트 결과 저장
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: |
+            build/reports/tests/test/
+            build/test-results/test/
+          if-no-files-found: warn
