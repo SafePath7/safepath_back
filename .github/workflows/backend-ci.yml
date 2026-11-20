@@ -55,7 +55,11 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
         run: |
           mkdir -p deploy
-          mapfile -t jars < <(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-plain.jar')
+
+          mapfile -t jars < <(
+            find build/libs -maxdepth 1 -type f \
+              -name '*.jar' ! -name '*-plain.jar'
+          )
 
           if [ "${#jars[@]}" -ne 1 ]; then
             echo "실행용 JAR이 정확히 1개여야 합니다. 발견된 파일: ${#jars[@]}"
@@ -94,6 +98,9 @@ jobs:
       contents: read
 
     steps:
+      - name: 배포 스크립트 가져오기
+        uses: actions/checkout@v6
+
       - name: GitHub OIDC 대상 확인
         uses: actions/github-script@v7
         with:
@@ -124,6 +131,14 @@ jobs:
         run: |
           aws s3 cp deploy/backend.jar \
             "s3://safepath-dev-risk-media-kr/deploy/${GITHUB_SHA}/backend.jar"
+
+      - name: 배포 스크립트 문법 확인
+        run: bash -n scripts/deploy-backend.sh
+
+      - name: 배포 스크립트를 S3에 업로드
+        run: |
+          aws s3 cp scripts/deploy-backend.sh \
+            "s3://safepath-dev-risk-media-kr/deploy/${GITHUB_SHA}/deploy-backend.sh"
 
       - name: EC2 명령 전달 확인
         run: |
