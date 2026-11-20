@@ -124,3 +124,27 @@ jobs:
         run: |
           aws s3 cp deploy/backend.jar \
             "s3://safepath-dev-risk-media-kr/deploy/${GITHUB_SHA}/backend.jar"
+
+      - name: EC2 명령 전달 확인
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --region ap-northeast-2 \
+            --instance-ids i-0967f249082d796da \
+            --document-name AWS-RunShellScript \
+            --parameters 'commands=["systemctl is-active safepath-backend"]' \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "SSM 명령 ID: $COMMAND_ID"
+
+          aws ssm wait command-executed \
+            --region ap-northeast-2 \
+            --command-id "$COMMAND_ID" \
+            --instance-id i-0967f249082d796da
+
+          aws ssm get-command-invocation \
+            --region ap-northeast-2 \
+            --command-id "$COMMAND_ID" \
+            --instance-id i-0967f249082d796da \
+            --query '{Status:Status,Output:StandardOutputContent}' \
+            --output json
