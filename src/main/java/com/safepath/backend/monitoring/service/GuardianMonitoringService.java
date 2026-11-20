@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -88,6 +89,20 @@ public class GuardianMonitoringService {
 
 	public ActiveSession getMonitoringStatus(UUID sessionId, Long guardianId) {
 		return validateMonitoringPermission(sessionId, guardianId);
+	}
+
+	public Optional<ActiveSession> findActiveSession(Long userId, Long guardianId) {
+		if (userId == null || userId <= 0 || guardianId == null || guardianId <= 0) {
+			throw new IllegalArgumentException("User and guardian IDs must be positive");
+		}
+		if (userId.equals(guardianId)
+				|| !guardianPermissionService.hasGuardianPermission(userId, guardianId, PermissionType.LOCATION)) {
+			throw new AccessDeniedException("Monitoring access denied");
+		}
+		synchronized (activeSessionStore) {
+			return activeSessionStore.findByUserId(userId)
+					.filter(session -> selectedGuardianStore.isSelectedGuardian(session.id(), guardianId));
+		}
 	}
 
 	/** guardianId must be resolved server-side from the authenticated Firebase principal. */

@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Internal boundary for a future Controller using Authentication supplied by the Firebase security chain. */
@@ -24,6 +25,10 @@ public class GuardianMonitoringQueryService {
 
 	public ActiveSession getMonitoringStatus(UUID sessionId, Authentication authentication) {
 		return monitoringService.getMonitoringStatus(sessionId, authenticatedGuardianId(authentication));
+	}
+
+	public Optional<ActiveSession> findActiveSession(Long userId, Authentication authentication) {
+		return monitoringService.findActiveSession(userId, authenticatedGuardianId(authentication));
 	}
 
 	public ActiveSession getMonitoringRoute(UUID sessionId, Authentication authentication) {

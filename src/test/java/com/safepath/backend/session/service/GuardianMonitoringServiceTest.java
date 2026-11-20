@@ -45,6 +45,24 @@ class GuardianMonitoringServiceTest {
 	}
 
 	@Test
+	void findsOnlyAnActiveSessionThatSelectedTheAuthorizedGuardian() {
+		allowStatus();
+		assertSame(session, monitoringService.findActiveSession(OWNER_ID, GUARDIAN_ID).orElseThrow());
+		selectedGuardianStore.remove(session.id());
+		org.junit.jupiter.api.Assertions.assertTrue(monitoringService.findActiveSession(OWNER_ID, GUARDIAN_ID).isEmpty());
+		selectedGuardianStore.save(session.id(), Set.of(GUARDIAN_ID));
+		sessionService.endSession(session.id(), OWNER_ID);
+		org.junit.jupiter.api.Assertions.assertTrue(monitoringService.findActiveSession(OWNER_ID, GUARDIAN_ID).isEmpty());
+	}
+
+	@Test
+	void refusesActiveSessionLookupWithoutLocationPermission() {
+		assertThrows(AccessDeniedException.class, () -> monitoringService.findActiveSession(OWNER_ID, GUARDIAN_ID));
+		assertThrows(AccessDeniedException.class, () -> monitoringService.findActiveSession(OWNER_ID, OWNER_ID));
+		assertThrows(IllegalArgumentException.class, () -> monitoringService.findActiveSession(0L, GUARDIAN_ID));
+	}
+
+	@Test
 	void returnsExistingSessionForAcceptedSelectedGuardianWithStatusPermission() {
 		allowStatus();
 		assertSame(session, monitoringService.getMonitoringStatus(session.id(), GUARDIAN_ID));

@@ -23,6 +23,14 @@ public class GuardianMonitoringController {
 		this.queryService = queryService;
 	}
 
+	@GetMapping("/users/{userId}/active")
+	public ResponseEntity<GuardianStatusResponse> getActiveSession(
+			@PathVariable Long userId, Authentication authentication) {
+		return queryService.findActiveSession(userId, authentication)
+				.map(session -> ResponseEntity.ok(new GuardianStatusResponse(session.id(), session.startedAt())))
+				.orElseGet(() -> ResponseEntity.noContent().build());
+	}
+
 	@GetMapping("/{sessionId}/status")
 	public ResponseEntity<GuardianStatusResponse> getMonitoringStatus(
 			@PathVariable UUID sessionId, Authentication authentication) {

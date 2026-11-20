@@ -130,6 +130,22 @@ class SafeReturnSessionControllerTest {
 		}
 	}
 
+	@Test
+	void guardianCanFindSelectedUsersActiveSession() throws Exception {
+		String url = "/api/guardian/monitoring/sessions/users/42/active";
+		mockMvc.perform(get(url).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isNoContent());
+		UUID id = startSession(USER_1_TOKEN);
+		mockMvc.perform(get(url).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.id").value(id.toString()));
+		mockMvc.perform(get(url)).andExpect(status().isUnauthorized());
+		var registrations = context.getBean(com.safepath.backend.guardian.service.GuardianRegistrationService.class);
+		when(registrations.hasGuardianPermission(42L, 2L, com.safepath.backend.guardian.entity.PermissionType.LOCATION)).thenReturn(false);
+		mockMvc.perform(get(url).header("Authorization", bearer("guardian-2")))
+				.andExpect(status().isForbidden());
+	}
+
 	@AfterEach
 	void tearDown() {
 		context.close();
