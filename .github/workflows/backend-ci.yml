@@ -72,6 +72,17 @@ jobs:
       contents: read
 
     steps:
+      - name: GitHub OIDC 대상 확인
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('sts.amazonaws.com');
+            const payload = JSON.parse(
+              Buffer.from(token.split('.')[1], 'base64url').toString()
+            );
+            console.log('sub:', payload.sub);
+            console.log('aud:', payload.aud);
+
       - name: AWS 역할로 인증
         uses: aws-actions/configure-aws-credentials@v4
         with:
