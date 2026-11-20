@@ -31,7 +31,6 @@ jobs:
           --health-retries 5
 
     steps:
-    
       - name: 소스 코드 가져오기
         uses: actions/checkout@v6
 
@@ -51,6 +50,29 @@ jobs:
 
       - name: 테스트 및 실행용 JAR 빌드
         run: bash ./gradlew build bootJar
+
+      - name: 배포용 JAR 준비
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          mkdir -p deploy
+          mapfile -t jars < <(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-plain.jar')
+
+          if [ "${#jars[@]}" -ne 1 ]; then
+            echo "실행용 JAR이 정확히 1개여야 합니다. 발견된 파일: ${#jars[@]}"
+            printf '%s\n' "${jars[@]}"
+            exit 1
+          fi
+
+          cp "${jars[0]}" deploy/backend.jar
+
+      - name: 배포용 JAR 저장
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: deploy/backend.jar
+          if-no-files-found: error
+          retention-days: 7
 
       - name: 테스트 결과 저장
         if: always()
