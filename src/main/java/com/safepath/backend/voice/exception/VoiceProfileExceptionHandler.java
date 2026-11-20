@@ -19,6 +19,16 @@ public class VoiceProfileExceptionHandler {
         return detail;
     }
 
+    @ExceptionHandler(VoiceProfileException.class)
+    ProblemDetail handleVoiceProfileException(VoiceProfileException exception) {
+        return switch (exception.reason()) {
+            case ALREADY_EXISTS -> handleApiException(ApiException.conflict("음성 프로필이 이미 존재합니다."));
+            case INVALID_INPUT -> handleApiException(ApiException.badRequest("음성 프로필 입력값이 유효하지 않습니다."));
+            case NOT_FOUND -> handleApiException(ApiException.notFound("음성 프로필"));
+            case CONSTRAINT_VIOLATION, DATABASE_ERROR -> handleServerError();
+        };
+    }
+
     @ExceptionHandler(RuntimeException.class)
     ProblemDetail handleServerError() {
         var detail = ProblemDetail.forStatusAndDetail(

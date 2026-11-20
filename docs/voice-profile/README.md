@@ -159,3 +159,10 @@ Controller 테스트는 실제 Spring Security 필터 체인과 `CurrentUser`를
 위 두 작업은 Voice Profile 등록·갱신·삭제 및 음성 특징 추출과 별도로 개발한다.
 
 후속 REST API와 AI 연동 완료 후 `develop` 대상 최종 PR 하나로 정리할 예정이다.
+
+### 쓰기 API 준비
+
+- 인증 경계는 GET과 동일하게 기존 Firebase 필터와 `CurrentUser.resolve(authentication).id()`를 사용한다. 클라이언트의 사용자 ID나 Firebase UID는 저장 대상을 결정하는 데 사용하지 않는다.
+- 생성은 저장소와 AI에서 검증된 값으로 내부 `VoiceProfileCommand`를 구성한 뒤 `createVoiceProfile()`로 위임한다. 갱신은 인증된 본인의 기존 행에 전체 Command를 적용하며, 미등록이면 내부 `NOT_FOUND`를 반환한다. 파일 교체 시 새 객체의 저장·분석·DB 커밋을 확인한 뒤 이전 객체를 정리하는 순서를 검토한다.
+- Voice 전용 예외 처리에서 중복은 409, 잘못된 내부 Command는 400, 처리되지 않은 프로필 미존재는 404, DB 오류는 500으로 매핑한다. GET의 프로필 미등록은 기존 200 응답을 유지한다. 공개 POST·PUT 요청 DTO와 입력 검증은 외부 계약 확정 후 연결한다.
+- DELETE 공개는 원본 파일 소유권, 정리 책임, 재시도와 회원 탈퇴 정책이 확정될 때까지 보류한다. 다음 단계에서는 파일 삭제 실패 시 DB 행 보존, DB 실패 시 보상, 탈퇴와의 경합, 반복 삭제 응답(404 또는 204)을 결정하고 검증한다.

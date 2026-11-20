@@ -1,5 +1,8 @@
 package com.safepath.backend.voice;
 
+import com.safepath.backend.common.util.UtcTime;
+import com.safepath.backend.voice.dto.VoiceProfileCommand;
+import com.safepath.backend.voice.exception.VoiceProfileException;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import java.time.LocalDateTime;
@@ -100,6 +103,37 @@ class VoiceProfileRepositoryTest {
             assertEquals(updatedAt, loaded.getUpdatedAt());
             assertTrue(updatedAt.isAfter(LocalDateTime.of(2000, 1, 1, 0, 0)));
             assertArrayEquals(new float[]{4, 5, 6, 7}, loaded.getSpeakerEmbedding());
+        });
+    }
+
+    @Test
+    void databaseRejectedUpdatePreservesAllPreviouslyStoredValues() {
+        rollback(userId -> {
+            var service = new VoiceProfileService(repository);
+            repository.saveAndFlush(profile(userId));
+            entityManager.clear();
+            var before = service.getVoiceProfile(userId);
+            jdbc.execute("SAVEPOINT before_voice_update");
+
+            // PostgreSQL rejects NUL in text even though this value passes domain validation.
+            var replacement = new VoiceProfileCommand(new float[]{4, 5}, "invalid\0reference",
+                    1.0, 200, "replacement-model", UtcTime.toInstant(LocalDateTime.of(2026, 2, 2, 0, 0)));
+            var failure = assertThrows(VoiceProfileException.class,
+                    () -> service.updateVoiceProfile(userId, replacement));
+            assertEquals(VoiceProfileException.Reason.CONSTRAINT_VIOLATION, failure.reason());
+
+            jdbc.execute("ROLLBACK TO SAVEPOINT before_voice_update");
+            entityManager.clear();
+            var after = service.getVoiceProfile(userId);
+            assertArrayEquals(before.speakerEmbedding(), after.speakerEmbedding());
+            assertEquals(before.userId(), after.userId());
+            assertEquals(before.audioFileUrl(), after.audioFileUrl());
+            assertEquals(before.baselineVolume(), after.baselineVolume());
+            assertEquals(before.baselinePitch(), after.baselinePitch());
+            assertEquals(before.modelVersion(), after.modelVersion());
+            assertEquals(before.consentedAt(), after.consentedAt());
+            assertEquals(before.createdAt(), after.createdAt());
+            assertEquals(before.updatedAt(), after.updatedAt());
         });
     }
 
