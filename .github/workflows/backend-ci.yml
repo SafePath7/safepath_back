@@ -15,7 +15,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: safepath
+          POSTGRES_USER: safepath_ci
+          POSTGRES_PASSWORD: safepath_ci_test_password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U safepath_ci -d safepath"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
+    
       - name: 소스 코드 가져오기
         uses: actions/checkout@v6
 
