@@ -1,0 +1,63 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: safepath
+          POSTGRES_USER: safepath_ci
+          POSTGRES_PASSWORD: safepath_ci_test_password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U safepath_ci -d safepath"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    
+      - name: 소스 코드 가져오기
+        uses: actions/checkout@v6
+
+      - name: Java 21 설정
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: 테스트용 환경 설정
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=safepath_ci
+          POSTGRES_PASSWORD=safepath_ci_test_password
+          EOF
+
+      - name: 테스트 및 실행용 JAR 빌드
+        run: bash ./gradlew build bootJar
+
+      - name: 테스트 결과 저장
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: |
+            build/reports/tests/test/
+            build/test-results/test/
+          if-no-files-found: warn
