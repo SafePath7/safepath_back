@@ -113,3 +113,14 @@ jobs:
 
       - name: AWS 계정 확인
         run: aws sts get-caller-identity
+
+      - name: 배포용 JAR 다운로드
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: deploy
+
+      - name: 배포용 JAR을 S3에 업로드
+        run: |
+          aws s3 cp deploy/backend.jar \
+            "s3://safepath-dev-risk-media-kr/deploy/${GITHUB_SHA}/backend.jar"
