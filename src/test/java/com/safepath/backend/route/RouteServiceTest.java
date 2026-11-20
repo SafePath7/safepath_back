@@ -4,6 +4,7 @@ import com.safepath.backend.common.exception.ApiException;
 import com.safepath.backend.route.dto.RouteRequest;
 import com.safepath.backend.route.dto.RouteRequest.Coordinate;
 import com.safepath.backend.route.score.*;
+import com.safepath.backend.route.service.RouteService;
 import com.safepath.backend.safety.service.SafetyFacilityService;
 import java.util.List;
 import org.junit.jupiter.api.Test;

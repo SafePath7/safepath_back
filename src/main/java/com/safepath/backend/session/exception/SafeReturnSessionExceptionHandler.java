@@ -1,6 +1,8 @@
 package com.safepath.backend.session.exception;
 
 import com.safepath.backend.session.controller.SafeReturnSessionController;
+import com.safepath.backend.monitoring.controller.GuardianMonitoringController;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import com.safepath.backend.session.dto.SessionApiErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,10 +13,11 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 
 import java.util.NoSuchElementException;
 
-@RestControllerAdvice(assignableTypes = SafeReturnSessionController.class)
+@RestControllerAdvice(assignableTypes = {SafeReturnSessionController.class, GuardianMonitoringController.class})
 public class SafeReturnSessionExceptionHandler {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(SafeReturnSessionExceptionHandler.class);
@@ -29,14 +32,19 @@ public class SafeReturnSessionExceptionHandler {
 		return error(HttpStatus.FORBIDDEN, "USER_NOT_REGISTERED", "A registered user account is required.");
 	}
 
+	@ExceptionHandler(GuardianSelectionDeniedException.class)
+	public ResponseEntity<SessionApiErrorResponse> handleGuardianSelectionDenied(GuardianSelectionDeniedException exception) {
+		return error(HttpStatus.FORBIDDEN, "GUARDIAN_SELECTION_DENIED", "Check the selected guardians and their location permissions.");
+	}
+
 	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
 	public ResponseEntity<SessionApiErrorResponse> handleInvalidPathParameter(
 			MethodArgumentTypeMismatchException exception) {
 		return error(HttpStatus.BAD_REQUEST, "INVALID_SESSION_ID", "The session ID is invalid.");
 	}
 
-	@ExceptionHandler(IllegalArgumentException.class)
-	public ResponseEntity<SessionApiErrorResponse> handleInvalidRequest(IllegalArgumentException exception) {
+	@ExceptionHandler({IllegalArgumentException.class, HttpMessageNotReadableException.class, MethodArgumentNotValidException.class})
+	public ResponseEntity<SessionApiErrorResponse> handleInvalidRequest(Exception exception) {
 		return error(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "The request is invalid.");
 	}
 

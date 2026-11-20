@@ -1,6 +1,7 @@
 package com.safepath.backend.websocket.dto;
 
 import java.time.Instant;
+import com.safepath.backend.session.model.SafetyStatus;
 
 public record LocationUpdateResponse(
         String connectionId,
@@ -9,6 +10,7 @@ public record LocationUpdateResponse(
         double longitude,
         Double accuracyMeters,
         Instant capturedAt,
-        Instant receivedAt
+        Instant receivedAt,
+        SafetyStatus safetyStatus
 ) {
 }

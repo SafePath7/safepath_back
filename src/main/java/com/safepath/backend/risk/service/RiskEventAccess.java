@@ -16,12 +16,12 @@ public class RiskEventAccess {
     }
 
     /**
-     * The member themself, a guardian whose ACCEPTED registration grants STATUS, or an
+     * The member themself, a guardian whose ACCEPTED registration grants LOCATION, or an
      * admin. The admin lookup is a Firebase call, so it is tried last.
      */
     public void requireViewer(Actor actor, long userId) {
         if (actor.id() == userId) return;
-        if (guardians.hasGuardianPermission(userId, actor.id(), PermissionType.STATUS)) return;
+        if (guardians.hasGuardianPermission(userId, actor.id(), PermissionType.LOCATION)) return;
         actor.requireAdmin();
     }
 }
