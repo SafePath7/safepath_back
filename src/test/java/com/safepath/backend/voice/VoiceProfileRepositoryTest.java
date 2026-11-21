@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Opt-in local PostgreSQL only; no application startup, Flyway, Firebase, or S3.
  * All synthetic rows use explicit IDs and roll back, without changing sequences. */
 @EnabledIfEnvironmentVariable(named = "SAFEPATH_VOICE_TEST_DB_URL",
-        matches = "jdbc:postgresql://(?:127\\.0\\.0\\.1|localhost):5433/safepath")
+        matches = "jdbc:postgresql://127\\.0\\.0\\.1:5433/safepath_voice_dev")
 class VoiceProfileRepositoryTest {
     private static AnnotationConfigApplicationContext context;
     private static VoiceProfileRepository repository;

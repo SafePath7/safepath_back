@@ -1,5 +1,6 @@
 package com.safepath.backend.voice;
 
+import com.safepath.backend.common.util.UtcTime;
 import com.safepath.backend.voice.dto.VoiceProfileCommand;
 import com.safepath.backend.voice.dto.VoiceProfileRegistration;
 import com.safepath.backend.voice.dto.VoiceProfileRegistration.AudioInput;
@@ -50,15 +51,45 @@ public class VoiceProfileRegistrationService {
         return change(userId, changes -> {
             var prior = repository.findById(userId);
             prior.ifPresent(changes::rememberPrevious);
-            Instant consentedAt = Instant.now();
-            String calmReference = changes.save(registration.calmAudio());
-            String urgentReference = registration.urgentAudio() == null ? null : changes.save(registration.urgentAudio());
-            var command = new VoiceProfileCommand(registration.speakerEmbedding(), calmReference,
-                    registration.baselineVolume(), registration.baselinePitch(), registration.modelVersion(),
-                    consentedAt, registration.baselineDetails(), urgentReference);
+            var command = saveRecordings(registration, changes, Instant.now());
             return prior.isPresent() ? profiles.updateVoiceProfile(userId, command)
                     : profiles.createVoiceProfile(userId, command);
         });
+    }
+
+    public void registerNew(Long userId, VoiceProfileRegistration registration) {
+        if (registration == null) throw VoiceProfileException.invalid("registration");
+        change(userId, false, changes -> {
+            changes.stage = "check-existing-profile";
+            if (repository.existsById(userId)) {
+                throw new VoiceProfileException(Reason.ALREADY_EXISTS, "Voice profile already exists.");
+            }
+            var command = saveRecordings(registration, changes, Instant.now());
+            changes.stage = "persist-profile";
+            profiles.createVoiceProfile(userId, command);
+            return null;
+        });
+    }
+
+    public void updateExisting(Long userId, VoiceProfileRegistration registration) {
+        if (registration == null) throw VoiceProfileException.invalid("registration");
+        change(userId, false, changes -> {
+            var prior = repository.findById(userId)
+                    .orElseThrow(() -> new VoiceProfileException(Reason.NOT_FOUND, "Voice profile was not found."));
+            changes.rememberPrevious(prior);
+            profiles.updateVoiceProfile(userId,
+                    saveRecordings(registration, changes, UtcTime.toInstant(prior.getConsentedAt())));
+            return null;
+        });
+    }
+
+    private VoiceProfileCommand saveRecordings(VoiceProfileRegistration registration, FileChanges changes,
+            Instant consentedAt) {
+        String calmReference = changes.save(registration.calmAudio());
+        String urgentReference = registration.urgentAudio() == null ? null : changes.save(registration.urgentAudio());
+        return new VoiceProfileCommand(registration.speakerEmbedding(), calmReference,
+                registration.baselineVolume(), registration.baselinePitch(), registration.modelVersion(),
+                consentedAt, registration.baselineDetails(), urgentReference);
     }
 
     public void delete(Long userId) {
@@ -78,30 +109,51 @@ public class VoiceProfileRegistrationService {
     }
 
     private <T> T change(Long userId, Function<FileChanges, T> action) {
+        return change(userId, true, action);
+    }
+
+    private <T> T change(Long userId, boolean requireStorageBeforeLock, Function<FileChanges, T> action) {
         requireNoAmbientTransaction();
         if (userId == null || userId <= 0) throw VoiceProfileException.invalid("userId");
-        VoiceAudioStorage storage = requireStorage();
-        var changes = new FileChanges(storage);
+        var changes = new FileChanges(requireStorageBeforeLock ? requireStorage() : null);
         try {
             T result = transaction.execute(status -> {
                 TransactionSynchronizationManager.registerSynchronization(changes);
+                changes.stage = "lock-member";
                 if (repository.lockOwner(userId).isEmpty()) {
                     throw new VoiceProfileException(Reason.NOT_FOUND, "Voice profile member was not found.");
                 }
-                return action.apply(changes);
+                changes.stage = "profile-operation";
+                T value = action.apply(changes);
+                changes.stage = "commit";
+                return value;
             });
             if (changes.outcome != TransactionSynchronization.STATUS_COMMITTED) {
                 throw new VoiceProfileException(Reason.DATABASE_ERROR, "Voice profile transaction did not commit.");
             }
             return result;
+        } catch (VoiceAudioStorageException failure) {
+            if (failure.reason() != VoiceAudioStorageException.Reason.INVALID_AUDIO
+                    && failure.reason() != VoiceAudioStorageException.Reason.TOO_LARGE) {
+                LOGGER.warn("Voice profile operation failed at {} ({}).", changes.stage, failure.reason());
+            }
+            throw failure;
+        } catch (VoiceProfileException failure) {
+            if (failure.reason() == Reason.DATABASE_ERROR || failure.reason() == Reason.CONSTRAINT_VIOLATION) {
+                LOGGER.warn("Voice profile operation failed at {} ({}).", changes.stage, failure.reason());
+            }
+            throw failure;
+        } catch (RuntimeException failure) {
+            LOGGER.warn("Voice profile operation failed at {} ({}).", changes.stage, failure.getClass().getSimpleName());
+            throw failure;
         } finally {
             switch (changes.outcome) {
-                case TransactionSynchronization.STATUS_COMMITTED -> clean(storage, userId, changes.previous);
-                case TransactionSynchronization.STATUS_ROLLED_BACK -> clean(storage, userId, changes.created);
+                case TransactionSynchronization.STATUS_COMMITTED -> clean(changes.storage, userId, changes.previous);
+                case TransactionSynchronization.STATUS_ROLLED_BACK -> clean(changes.storage, userId, changes.created);
                 // Reconcile uncertain commits in a fresh, owner-locked transaction.
                 default -> {
-                    clean(storage, userId, changes.previous);
-                    clean(storage, userId, changes.created);
+                    clean(changes.storage, userId, changes.previous);
+                    clean(changes.storage, userId, changes.created);
                 }
             }
         }
@@ -126,7 +178,7 @@ public class VoiceProfileRegistrationService {
             pendingCleanup.remove(cleanup);
         } catch (RuntimeException failure) {
             pendingCleanup.add(cleanup);
-            LOGGER.warn("Voice audio cleanup deferred for member {}.", cleanup.userId());
+            LOGGER.warn("Voice audio cleanup deferred ({}).", failure.getClass().getSimpleName());
         }
     }
 
@@ -145,8 +197,9 @@ public class VoiceProfileRegistrationService {
 
     private record Cleanup(long userId, String reference) {}
 
-    private static final class FileChanges implements TransactionSynchronization {
-        private final VoiceAudioStorage storage;
+    private final class FileChanges implements TransactionSynchronization {
+        private VoiceAudioStorage storage;
+        private String stage = "begin-transaction";
         private final Set<String> created = new LinkedHashSet<>();
         private final Set<String> previous = new LinkedHashSet<>();
         private int outcome = STATUS_UNKNOWN;
@@ -154,6 +207,9 @@ public class VoiceProfileRegistrationService {
         private FileChanges(VoiceAudioStorage storage) { this.storage = storage; }
 
         private String save(AudioInput audio) {
+            stage = "resolve-storage";
+            if (storage == null) storage = requireStorage();
+            stage = "store-recording";
             String reference = storage.store(audio.fileName(), audio.contentType(), audio.declaredSize(), audio.contents());
             created.add(reference);
             return reference;

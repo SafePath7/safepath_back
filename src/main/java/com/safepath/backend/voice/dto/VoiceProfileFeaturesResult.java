@@ -1,10 +1,11 @@
 package com.safepath.backend.voice.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import tools.jackson.databind.JsonNode;
 
 /** Internal AI features; the HTTP response contract is separate. */
 public record VoiceProfileFeaturesResult(float[] speakerEmbedding, double baselineVolume, double baselinePitch,
-        String modelVersion, JsonNode baselineDetails) {
+        String modelVersion, @JsonInclude(JsonInclude.Include.ALWAYS) JsonNode baselineDetails) {
     public VoiceProfileFeaturesResult {
         speakerEmbedding = speakerEmbedding.clone();
         baselineDetails = baselineDetails == null ? null : baselineDetails.deepCopy();

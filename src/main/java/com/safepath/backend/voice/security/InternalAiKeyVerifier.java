@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 /** Verifies a server key without granting HTTP access or resolving a user identity. */
 @Component
 public class InternalAiKeyVerifier {
+    public static final String HEADER_NAME = "X-Internal-Key";
     private final byte[] expectedDigest;
 
     public InternalAiKeyVerifier(@Value("${SAFEPATH_AI_INTERNAL_KEY:}") String configuredKey) {

@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -31,6 +32,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.env.MapPropertySource;
@@ -46,7 +49,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @EnabledIfEnvironmentVariable(named = "SAFEPATH_VOICE_TEST_DB_URL",
-        matches = "jdbc:postgresql://(?:127\\.0\\.0\\.1|localhost):5433/safepath")
+        matches = "jdbc:postgresql://127\\.0\\.0\\.1:5433/safepath_voice_dev")
 class VoiceProfileRegistrationIntegrationTest {
     private static final Instant OLD_TIME = Instant.parse("2000-01-01T00:00:00Z");
     private static final JsonMapper JSON = new JsonMapper();
@@ -320,6 +323,160 @@ class VoiceProfileRegistrationIntegrationTest {
                 assertEquals(2, fileCount());
             }
         }
+    }
+
+    @Test
+    void createOnlyRegistrationRejectsDuplicateWithoutChangingFiles() throws IOException {
+        registration.registerNew(userId, request(true, "first"));
+        var original = databaseProfile();
+
+        var conflict = assertThrows(VoiceProfileException.class,
+                () -> registration.registerNew(userId, request(false, "duplicate")));
+
+        assertEquals(VoiceProfileException.Reason.ALREADY_EXISTS, conflict.reason());
+        assertEquals(original.audioFileUrl(), databaseProfile().audioFileUrl());
+        assertEquals(original.urgentAudioFileUrl(), databaseProfile().urgentAudioFileUrl());
+        assertArrayEquals(wave(), storage.read(original.audioFileUrl()));
+        assertArrayEquals(wave(), storage.read(original.urgentAudioFileUrl()));
+        assertEquals(2, fileCount());
+    }
+
+    @Test
+    void concurrentCreateOnlyRegistrationsProduceOneSuccessAndOneConflict() throws Exception {
+        Callable<String> create = () -> {
+            try {
+                registration.registerNew(userId, request(true, "concurrent"));
+                return "created";
+            } catch (VoiceProfileException conflict) {
+                assertEquals(VoiceProfileException.Reason.ALREADY_EXISTS, conflict.reason());
+                return "conflict";
+            }
+        };
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var results = executor.invokeAll(List.of(create, create));
+            assertEquals(Set.of("created", "conflict"), Set.of(results.get(0).get(), results.get(1).get()));
+        }
+        var saved = databaseProfile();
+        assertEquals(2, fileCount());
+        assertTrue(storage.exists(saved.audioFileUrl()));
+        assertTrue(storage.exists(saved.urgentAudioFileUrl()));
+    }
+
+    @Test
+    void createOnlyRegistrationCompensatesStorageAndDatabaseFailures() throws IOException {
+        var valid = request(false, "valid");
+        var broken = new AudioInput("broken.wav", "audio/wav", 1, new ByteArrayInputStream(new byte[]{1}));
+        assertThrows(VoiceAudioStorageException.class, () -> registration.registerNew(userId,
+                new VoiceProfileRegistration(embedding(), 0.5, 150, "model", null, valid.calmAudio(), broken)));
+        assertFalse(repository.existsById(userId));
+        assertEquals(0, fileCount());
+        assertThrows(VoiceProfileException.class,
+                () -> registration.registerNew(userId, request(true, "invalid\0model")));
+        assertFalse(repository.existsById(userId));
+        assertEquals(0, fileCount());
+    }
+
+    @Test
+    void updateOnlyRejectsMissingProfileBeforeStoringAnyFile() throws IOException {
+        var failure = assertThrows(VoiceProfileException.class,
+                () -> registration.updateExisting(userId, request(true, "update")));
+        assertEquals(VoiceProfileException.Reason.NOT_FOUND, failure.reason());
+        verifyNoInteractions(storage);
+        assertFalse(repository.existsById(userId));
+        assertEquals(0, fileCount());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void updateReplacesRecordingsAfterCommitAndKeepsInitialConsent(boolean urgent) throws IOException {
+        registration.registerNew(userId, request(true, "first"));
+        jdbc.update("""
+                UPDATE voice_profiles SET consented_at=TIMESTAMP '2000-01-01', updated_at=TIMESTAMP '2000-01-01'
+                WHERE user_id=?
+                """, userId);
+        var old = databaseProfile();
+        doAnswer(call -> {
+            assertEquals("replacement", databaseProfile().modelVersion());
+            return call.callRealMethod();
+        }).when(storage).delete(anyString());
+
+        registration.updateExisting(userId, request(urgent, "replacement"));
+
+        var updated = databaseProfile();
+        assertEquals(OLD_TIME, updated.consentedAt());
+        assertEquals(old.createdAt(), updated.createdAt());
+        assertTrue(updated.updatedAt().isAfter(old.updatedAt()));
+        assertNotEquals(old.audioFileUrl(), updated.audioFileUrl());
+        assertArrayEquals(wave(), storage.read(updated.audioFileUrl()));
+        if (urgent) {
+            assertNotEquals(old.urgentAudioFileUrl(), updated.urgentAudioFileUrl());
+            assertArrayEquals(wave(), storage.read(updated.urgentAudioFileUrl()));
+        } else {
+            assertNull(updated.urgentAudioFileUrl());
+        }
+        assertFalse(storage.exists(old.audioFileUrl()));
+        assertFalse(storage.exists(old.urgentAudioFileUrl()));
+        assertEquals(urgent ? 2 : 1, fileCount());
+    }
+
+    @Test
+    void updatePreservesExistingFilesOnStorageOrDatabaseFailure() throws IOException {
+        registration.registerNew(userId, request(true, "first"));
+        var old = databaseProfile();
+        var broken = new AudioInput("broken.wav", "audio/wav", 1, new ByteArrayInputStream(new byte[]{1}));
+        assertThrows(VoiceAudioStorageException.class, () -> registration.updateExisting(userId,
+                new VoiceProfileRegistration(embedding(), 0.5, 150, "next", null, audio(), broken)));
+        assertThrows(VoiceProfileException.class,
+                () -> registration.updateExisting(userId, request(true, "invalid\0model")));
+        var current = databaseProfile();
+        assertEquals(old.audioFileUrl(), current.audioFileUrl());
+        assertEquals(old.urgentAudioFileUrl(), current.urgentAudioFileUrl());
+        assertEquals(old.updatedAt(), current.updatedAt());
+        assertArrayEquals(wave(), storage.read(old.audioFileUrl()));
+        assertArrayEquals(wave(), storage.read(old.urgentAudioFileUrl()));
+        assertEquals(2, fileCount());
+    }
+
+    @Test
+    void updateRemainsCommittedWhenPreviousFileCleanupMustBeRetried() throws IOException {
+        registration.registerNew(userId, request(false, "first"));
+        var old = databaseProfile();
+        doThrow(new VoiceAudioStorageException(VoiceAudioStorageException.Reason.STORAGE_FAILURE))
+                .doCallRealMethod().when(storage).delete(old.audioFileUrl());
+        registration.updateExisting(userId, request(false, "next"));
+
+        var updated = databaseProfile();
+        assertEquals("next", updated.modelVersion());
+        assertEquals(old.consentedAt(), updated.consentedAt());
+        assertTrue(storage.exists(old.audioFileUrl()));
+        assertEquals(0, registration.retryPendingCleanup());
+        assertFalse(storage.exists(old.audioFileUrl()));
+        assertTrue(storage.exists(updated.audioFileUrl()));
+        assertEquals(1, fileCount());
+    }
+
+    @Test
+    void concurrentUpdatesAndDuplicatePostKeepOnlyTheFinalReferences() throws Exception {
+        registration.registerNew(userId, request(true, "first"));
+        var initial = databaseProfile();
+        try (var executor = Executors.newFixedThreadPool(3)) {
+            List<Callable<Void>> calls = List.of(
+                    () -> { registration.updateExisting(userId, request(true, "update-a")); return null; },
+                    () -> { registration.updateExisting(userId, request(true, "update-b")); return null; },
+                    () -> {
+                        var conflict = assertThrows(VoiceProfileException.class,
+                                () -> registration.registerNew(userId, request(false, "duplicate")));
+                        assertEquals(VoiceProfileException.Reason.ALREADY_EXISTS, conflict.reason());
+                        return null;
+                    });
+            for (var result : executor.invokeAll(calls)) result.get();
+        }
+        var saved = databaseProfile();
+        assertTrue(Set.of("update-a", "update-b").contains(saved.modelVersion()));
+        assertEquals(initial.consentedAt(), saved.consentedAt());
+        assertTrue(storage.exists(saved.audioFileUrl()));
+        assertTrue(storage.exists(saved.urgentAudioFileUrl()));
+        assertEquals(2, fileCount());
     }
 
     @Test

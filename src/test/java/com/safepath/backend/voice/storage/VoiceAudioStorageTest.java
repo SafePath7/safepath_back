@@ -101,6 +101,8 @@ class VoiceAudioStorageTest {
         assertReason(INVALID_AUDIO, () -> store("recording.m4a", null, box("ftyp", ascii("M4A "))));
         assertReason(INVALID_AUDIO, () -> store("recording.mp3", null, Arrays.copyOf(mp3(), 100)));
         assertReason(INVALID_AUDIO, () -> store("recording.mp3", null, ascii("ID3")));
+        assertReason(INVALID_AUDIO, () -> store("recording.wav", "audio/wav", mp3()));
+        assertReason(INVALID_AUDIO, () -> store("recording.wav", "audio/wav", m4a()));
     }
 
     @Test
