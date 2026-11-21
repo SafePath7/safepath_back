@@ -1,15 +1,21 @@
 package com.safepath.backend.config;
 
 import com.safepath.backend.auth.FirebaseAuthenticationFilter;
+import com.safepath.backend.voice.security.InternalAiKeyVerifier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
 @Configuration
@@ -25,9 +31,18 @@ public class SecurityConfig {
 
     // 로그인 요청, 웹소켓 요청은 인증 없이 접근 가능 / 그 외 요청은 인증 필요
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, FirebaseAuthenticationFilter firebaseAuthenticationFilter) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, FirebaseAuthenticationFilter firebaseAuthenticationFilter,
+            ObjectProvider<InternalAiKeyVerifier> internalKeys) throws Exception {
         RequestMatcher login = request -> HttpMethod.POST.matches(request.getMethod())
                 && "/api/auth/login".equals(request.getServletPath());
+        AuthorizationManager<RequestAuthorizationContext> voiceWrite = (authentication, context) -> {
+            var actor = authentication.get();
+            var verifier = internalKeys.getIfAvailable();
+            return new AuthorizationDecision(actor != null && actor.isAuthenticated()
+                    && !(actor instanceof AnonymousAuthenticationToken)
+                    && verifier != null
+                    && verifier.matches(context.getRequest().getHeader(InternalAiKeyVerifier.HEADER_NAME)));
+        };
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -38,6 +53,8 @@ public class SecurityConfig {
                         .requestMatchers(login).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/safety-facilities").permitAll()
                         .requestMatchers("/ws", "/ws/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/voice-profiles").access(voiceWrite)
+                        .requestMatchers(HttpMethod.PUT, "/api/voice-profiles/me").access(voiceWrite)
                         .anyRequest().authenticated())
                 .addFilterBefore(firebaseAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
