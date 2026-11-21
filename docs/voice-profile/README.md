@@ -166,3 +166,54 @@ Controller 테스트는 실제 Spring Security 필터 체인과 `CurrentUser`를
 - 생성은 저장소와 AI에서 검증된 값으로 내부 `VoiceProfileCommand`를 구성한 뒤 `createVoiceProfile()`로 위임한다. 갱신은 인증된 본인의 기존 행에 전체 Command를 적용하며, 미등록이면 내부 `NOT_FOUND`를 반환한다. 파일 교체 시 새 객체의 저장·분석·DB 커밋을 확인한 뒤 이전 객체를 정리하는 순서를 검토한다.
 - Voice 전용 예외 처리에서 중복은 409, 잘못된 내부 Command는 400, 처리되지 않은 프로필 미존재는 404, DB 오류는 500으로 매핑한다. GET의 프로필 미등록은 기존 200 응답을 유지한다. 공개 POST·PUT 요청 DTO와 입력 검증은 외부 계약 확정 후 연결한다.
 - DELETE 공개는 원본 파일 소유권, 정리 책임, 재시도와 회원 탈퇴 정책이 확정될 때까지 보류한다. 다음 단계에서는 파일 삭제 실패 시 DB 행 보존, DB 실패 시 보상, 탈퇴와의 경합, 반복 삭제 응답(404 또는 204)을 결정하고 검증한다.
+
+## 3단계 · 비공개 음성 원본 저장소
+
+`voice/storage/VoiceAudioStorage`는 `store()`, `read()`, `delete()`, `exists()`를 제공한다. `LocalEncryptedVoiceAudioStorage`는 로컬 파일을 관리하고, `VoiceAudioFileValidator`와 `VoiceAudioEncryption`은 각각 형식 검증과 암호화를 처리한다. `VoiceAudioStorageConfiguration`이 활성화된 저장소를 등록한다. 원본 스트림은 호출자가 닫는다.
+
+WAV·M4A·MP3를 **파일당 10 MiB(10,485,760바이트)**까지 허용한다. 선언 크기와 실제 읽은 크기를 검사하고, 확장자·제공된 MIME 유형과 RIFF 청크, ISO BMFF 오디오 트랙·미디어 박스, MPEG Layer III 프레임 구조를 확인한다. MIME이 없거나 `application/octet-stream`이어도 구조 검증은 동일하다. 구조 검사는 디코딩, 재생 가능성, 음성 품질이나 길이를 보증하지 않는다. 평소·위급 음성은 각각 호출해 별도 참조를 얻는다. 위급 음성이 없으면 상위 계층이 저장 호출을 생략한다.
+
+저장소는 `voice-audio:<UUID>` 참조를 반환한다. 원본명과 클라이언트 경로는 저장 위치에 쓰지 않는다. 암호화된 임시 파일에 쓰고 동일 파일시스템의 하드 링크로 완성본을 공개한다. 대상이 이미 있거나 하드 링크가 지원되지 않으면 저장에 실패한다. 읽기는 참조·파일 경계를 확인하고 GCM 인증이 끝난 뒤 메모리의 바이트를 반환한다. 유효한 참조의 반복 삭제는 안전하며, 없는 파일 읽기는 `NOT_FOUND`를 반환한다. 외부 HTTP 다운로드는 제공하지 않는다.
+
+### 암호화 포맷 SCHEMA v1
+
+| 오프셋 | 내용 |
+|---|---|
+| 0–3 | ASCII `SPVA` |
+| 4 | 포맷 버전 `0x01` |
+| 5–16 | 파일별 `SecureRandom` 12바이트 nonce |
+| 17 이후 | AES-256-GCM 암호문, 끝 16바이트는 인증 태그 |
+
+알고리즘은 `AES/GCM/NoPadding`이다. 헤더와 논리 참조를 추가 인증 데이터로 사용한다. 키는 파일에 기록하지 않는다. 키를 교체하면 기존 키로 보관된 파일을 새 키만으로 읽을 수 없다. 자동 키 회전이나 키 ID 저장은 후속 버전의 범위다.
+
+### 로컬 설정
+
+실행 계정만 접근할 수 있는 애플리케이션 외부의 전용 절대 경로를 먼저 생성한다. 공개 웹 폴더나 심볼릭 링크를 쓰지 않으며, 파일시스템은 하드 링크를 지원해야 한다. 전용 디렉터리와 상위 경로는 신뢰된 관리자가 제한된 권한으로 관리한다.
+
+```dotenv
+SAFEPATH_VOICE_AUDIO_STORAGE_ENABLED=false
+SAFEPATH_VOICE_AUDIO_STORAGE_TYPE=local
+SAFEPATH_VOICE_AUDIO_STORAGE_PATH=
+SAFEPATH_VOICE_AUDIO_ENCRYPTION_KEY=
+```
+
+기본은 비활성이다. 활성화하면 잘못된 타입·키·경로 또는 쓰기/게시 불가로 시작이 실패한다. 로컬 설정 파일에서 표준 Spring 프로퍼티 이름을 사용하려면 각각 `safepath.voice.audio.storage.enabled`, `safepath.voice.audio.storage.type`, `safepath.voice.audio.storage.path`, `safepath.voice.audio.encryption.key`에 대응한다. 실제 키는 Git에 넣지 않는다. PowerShell에서 프로세스 환경변수로 키를 만들고 출력 없이 다음처럼 설정할 수 있다. 기존 파일 복호화가 필요하면 발급한 키를 승인된 비밀관리 시스템에 보존한다.
+
+```powershell
+$voiceKey = New-Object byte[] 32
+$voiceRandom = [Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+    $voiceRandom.GetBytes($voiceKey)
+    $env:SAFEPATH_VOICE_AUDIO_ENCRYPTION_KEY = [Convert]::ToBase64String($voiceKey)
+} finally {
+    $voiceRandom.Dispose()
+    [Array]::Clear($voiceKey, 0, $voiceKey.Length)
+}
+```
+
+### 후속 연동
+
+- 실제 등록 API를 연결할 때 저장소 사용 가능 여부를 검증한다. Spring multipart가 평문 임시 파일을 생성할 가능성과 두 파일의 합계 제한을 검토한다. 현행 전역 10MB/11MB 설정은 유지했으며, 향후 10MB/25MB는 위험 미디어 영향 검토 후 결정한다.
+- 다음 단계는 새 파일을 저장해 DB에 두 참조를 기록하고, DB 실패 시 새 파일을 제거하며, 커밋 후 이전 파일을 정리하는 흐름이다. 위급 음성 없는 갱신의 이전 파일 정리, 삭제 재시도, 프로세스 중단 시 고아 파일, 동시 갱신의 참조 안전성, 프로필 삭제·회원 탈퇴를 함께 설계한다.
+- S3 전환 시 동일 저장소 인터페이스와 불투명 참조를 유지하고 비공개 객체 범위, 암호화 및 이전 데이터 읽기 전략을 적용한다. 이 단계에는 S3 구현이나 호출이 없다.
+- 카카오톡 협의의 `PUT /api/internal/voice-profiles/{userId}`와 Notion의 `POST /api/voice-profiles`가 서로 다르다. 저장소는 어느 계약에도 결합하지 않았다. Notion의 `GET /api/voice-profiles/me/features`는 인증·응답 계약 확인 후 다룬다.
