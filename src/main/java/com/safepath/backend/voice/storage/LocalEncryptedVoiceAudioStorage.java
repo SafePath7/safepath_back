@@ -10,14 +10,11 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 import static com.safepath.backend.voice.storage.VoiceAudioStorageException.Reason.*;
 
 final class LocalEncryptedVoiceAudioStorage implements VoiceAudioStorage {
     private static final String PREFIX = "voice-audio:";
-    private static final Pattern REFERENCE = Pattern.compile(
-            "voice-audio:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}");
     private static final int MAX_STORED_BYTES = VoiceAudioFileValidator.MAX_FILE_BYTES + VoiceAudioEncryption.OVERHEAD;
 
     private final Path root;
@@ -131,7 +128,7 @@ final class LocalEncryptedVoiceAudioStorage implements VoiceAudioStorage {
     }
 
     private Path path(String reference) {
-        if (reference == null || !REFERENCE.matcher(reference).matches()) {
+        if (!VoiceAudioStorage.isManagedReference(reference)) {
             throw new VoiceAudioStorageException(INVALID_REFERENCE);
         }
         try {
