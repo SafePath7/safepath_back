@@ -30,6 +30,7 @@ import org.springframework.orm.jpa.SharedEntityManagerCreator;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -103,6 +104,67 @@ class VoiceProfileRepositoryTest {
             assertEquals(updatedAt, loaded.getUpdatedAt());
             assertTrue(updatedAt.isAfter(LocalDateTime.of(2000, 1, 1, 0, 0)));
             assertArrayEquals(new float[]{4, 5, 6, 7}, loaded.getSpeakerEmbedding());
+        });
+    }
+
+    @Test
+    void legacyInsertReadsNewColumnsAsSqlNull() {
+        rollback(userId -> {
+            jdbc.update("""
+                    INSERT INTO voice_profiles (user_id, speaker_embedding, audio_file_url,
+                        baseline_volume, baseline_pitch, model_version, consented_at)
+                    VALUES (?, ARRAY[0.125]::real[], 'legacy-reference', 0.5, 150, 'legacy-model',
+                        TIMESTAMP '2026-01-01')
+                    """, userId);
+
+            var loaded = repository.findById(userId).orElseThrow();
+            assertNull(loaded.getBaselineDetails());
+            assertNull(loaded.getUrgentAudioFileUrl());
+            assertEquals("legacy-reference", loaded.getAudioFileUrl());
+        });
+    }
+
+    @Test
+    void analysisAndUrgentReferenceRoundTripAndCanBeCleared() {
+        rollback(userId -> {
+            var service = new VoiceProfileService(repository);
+            var mapper = new JsonMapper();
+            var initialDetails = mapper.readTree("""
+                    {"embedding_source":"calm","urgent":{"samples":[1,2],"usable":true}}
+                    """);
+            var replacementDetails = mapper.readTree("{\"model_extension\":{\"nullable\":null}}");
+            var consent = UtcTime.toInstant(LocalDateTime.of(2026, 1, 1, 0, 0));
+            service.createVoiceProfile(userId, new VoiceProfileCommand(new float[]{0.125f}, "calm", 0.5,
+                    150, "test-model", consent, initialDetails, "urgent"));
+            entityManager.clear();
+            var created = service.getVoiceProfile(userId);
+            assertEquals(initialDetails, created.baselineDetails());
+            assertEquals("urgent", created.urgentAudioFileUrl());
+            assertEquals("jsonb", jdbc.queryForObject(
+                    "SELECT pg_typeof(baseline_details)::text FROM voice_profiles WHERE user_id = ?",
+                    String.class, userId));
+            jdbc.update("UPDATE voice_profiles SET updated_at = TIMESTAMP '2000-01-01' WHERE user_id = ?", userId);
+            entityManager.clear();
+
+            service.updateVoiceProfile(userId, new VoiceProfileCommand(new float[]{0.25f}, "new-calm", 0.6,
+                    155, "next-model", consent, replacementDetails, null));
+            entityManager.clear();
+            var updated = service.getVoiceProfile(userId);
+            assertEquals(replacementDetails, updated.baselineDetails());
+            assertNull(updated.urgentAudioFileUrl());
+            assertEquals("new-calm", updated.audioFileUrl());
+            assertEquals(created.createdAt(), updated.createdAt());
+            assertTrue(updated.updatedAt().isAfter(UtcTime.toInstant(LocalDateTime.of(2000, 1, 1, 0, 0))));
+
+            service.updateVoiceProfile(userId, new VoiceProfileCommand(new float[]{0.25f}, "new-calm", 0.6,
+                    155, "next-model", consent));
+            entityManager.clear();
+            assertNull(service.getVoiceProfile(userId).baselineDetails());
+            assertTrue(jdbc.queryForObject(
+                    "SELECT baseline_details IS NULL AND urgent_audio_file_url IS NULL FROM voice_profiles WHERE user_id = ?",
+                    Boolean.class, userId));
+            service.deleteVoiceProfile(userId);
+            assertFalse(repository.existsById(userId));
         });
     }
 

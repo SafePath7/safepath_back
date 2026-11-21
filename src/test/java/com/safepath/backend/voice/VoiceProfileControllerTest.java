@@ -20,6 +20,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -129,6 +130,7 @@ class VoiceProfileControllerTest {
 
     private VoiceProfileResult profile(long userId, Instant time) {
         return new VoiceProfileResult(userId, new float[] {0.5f}, "private-audio-path",
-                0.25, 145.0, "private-model", time, time, time);
+                0.25, 145.0, "private-model", time, time, time,
+                new JsonMapper().readTree("{\"internal\":true}"), "private-urgent-audio-path");
     }
 }

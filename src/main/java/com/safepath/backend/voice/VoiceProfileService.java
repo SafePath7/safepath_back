@@ -27,7 +27,7 @@ public class VoiceProfileService {
         requireCommand(command);
         VoiceProfile profile = new VoiceProfile(userId, command.speakerEmbedding(), command.audioFileUrl(),
                 command.baselineVolume(), command.baselinePitch(), command.modelVersion(),
-                UtcTime.fromInstant(command.consentedAt()));
+                UtcTime.fromInstant(command.consentedAt()), command.baselineDetails(), command.urgentAudioFileUrl());
         return databaseOperation(() -> {
             if (repository.existsById(userId)) throw duplicate();
             try {
@@ -52,7 +52,8 @@ public class VoiceProfileService {
             VoiceProfile profile = requireProfile(userId);
             requireCommand(command);
             profile.update(command.speakerEmbedding(), command.audioFileUrl(), command.baselineVolume(),
-                    command.baselinePitch(), command.modelVersion(), UtcTime.fromInstant(command.consentedAt()));
+                    command.baselinePitch(), command.modelVersion(), UtcTime.fromInstant(command.consentedAt()),
+                    command.baselineDetails(), command.urgentAudioFileUrl());
             return VoiceProfileResult.from(repository.saveAndFlush(profile));
         });
     }
