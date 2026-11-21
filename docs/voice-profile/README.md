@@ -233,3 +233,32 @@ try {
 회원 탈퇴는 기존 `UserOperations.withdraw()`가 파일이 있는 회원을 보류하는 흐름을 유지한다. 탈퇴와 원본 정리 완료의 연계는 별도 합의가 필요하다. 향후 AI 쓰기 API는 기존 인증·경로 정책 확정 후 이 서비스에 위임하고, AI 조회 API는 별도의 승인된 응답 DTO를 사용한다. 전역 multipart는 파일당 10MB, 요청당 11MB를 유지한다. REST 단계에서 요청당 25MB와 평문 임시 파일의 방지 또는 보호를 검토한다.
 
 Windows에서 건너뛴 심볼릭 링크·POSIX 쓰기 권한 테스트는 그대로 유지한다. Linux CI에서 두 테스트에 건너뜀이 없는지 확인해야 한다.
+
+## 5-A 단계 · AI 연동 전 내부 조회와 검증
+
+4단계 보존 커밋은 `9116a35` (`feat: integrate voice profile audio storage lifecycle`)이다.
+
+`VoiceProfileFeatureService.getFeatures(verifiedUserId)`는 기존 읽기 전용 `VoiceProfileService.getVoiceProfile()`에 위임한다. 내부 결과는 `speakerEmbedding`, `baselineVolume`, `baselinePitch`, `modelVersion`, `baselineDetails` 다섯 필드다. 내부 파일 참조와 원본은 포함하지 않으며 원본 읽기·복호화도 실행하지 않는다. 배열과 JSON은 방어적으로 복사하고, JSON null은 그대로 유지한다. 프로필 미등록은 내부 `NOT_FOUND`로 구분한다. 레거시 차원과 모델 버전은 읽은 그대로 제공한다. AI 분석 가능 여부와 미등록의 HTTP 응답은 최종 계약에서 결정한다. 공개 본인 등록 상태 GET은 현재 DTO를 유지한다.
+
+`InternalAiKeyVerifier.matches()`는 환경 설정 `SAFEPATH_AI_INTERNAL_KEY`를 사용한다. 실제 기본 키는 없으며, 누락·공백·잘못된 키는 거부한다. UTF-8 키의 SHA-256 고정 길이 결과를 `MessageDigest.isEqual()`로 비교하고 입력값을 로그에 남기지 않는다. 이 모듈은 인증 필터나 HTTP 인가를 구성하지 않는다.
+
+저장 API 연결 시 기존 `FirebaseAuthenticationFilter`가 검증한 Bearer 토큰의 UID를 `CurrentUser.resolve(authentication).id()`로 내부 회원 ID에 매핑한다. 여기에 내부 키 검증을 별도로 요구한다. 최종 경로에 대상 ID가 있다면 인증된 내부 ID와 대조하고, 없으면 내부 ID만으로 대상을 정한다. 인증 실패·대상 불일치는 저장 전에 차단하며, 실제 HTTP 형식은 최종 계약에서 정의한다. multipart 저장 경로에는 본문 파싱보다 앞선 검증 경계도 검토한다.
+
+### Multipart 수신과 평문 보호
+
+- 현재 공통 `application.properties`는 파일당 10MB, 요청당 11MB다. 위험 미디어의 `EventMediaUploadConfiguration`은 명시 설정을 우선하고, 설정이 없는 경우에만 10MB/12MB를 적용한다. 현재 프로필 파일에는 별도 위치나 임계값 설정이 없다.
+- 기본 임계값은 0바이트다. Servlet multipart 위치를 따로 지정하지 않으면 Tomcat 컨텍스트의 임시 디렉터리가 사용된다. `StandardServletMultipartResolver`는 기본적으로 요청을 파싱하고 처리 종료 시 파트를 정리한다. 격리된 테스트 디렉터리에 실제 HTTP 요청을 보내 처리 중 평문 파일 생성과 응답 후 제거를 확인한다. 비정상 프로세스 종료 후 정리까지 보장하지는 않는다.
+- **권장** · 승인 후 실행 계정만 접근할 수 있는 전용 비공개 스풀 디렉터리와 제한된 용량을 설정한다. 필요하면 암호화 볼륨과 비정상 종료 후 정리 책임을 함께 정한다. 메모리 방식은 디스크 평문을 줄이지만 두 10MiB 파일, 파싱·암호화 버퍼 및 동시 요청 수에 비례해 힙을 소모한다. 스트리밍은 이 부담을 줄일 수 있으나 인증 순서, 크기 상한, 중단·실패 복구를 별도 설계해야 한다.
+- 요청당 25MB가 확정되면 `spring.servlet.multipart.max-request-size`와 프록시 제한을 함께 검토한다. 공통 값을 변경하면 위험 미디어에도 적용되므로 영향 검토와 승인 후 변경한다.
+
+### 기존 쓰기 경계와 정리 재시도
+
+운영 소스에서 `VoiceProfileService.createVoiceProfile()`, `updateVoiceProfile()`, `deleteVoiceProfile()`의 현재 호출부는 생명주기 서비스다. 저수준 CRUD나 Repository를 새 호출부에서 직접 사용하면 파일 보상과 사용자 잠금을 우회할 수 있다. 향후 원본을 가진 등록·재등록·삭제는 `VoiceProfileRegistrationService`에 위임한다. 회원 탈퇴의 native DELETE는 별도 경로이며 현행 `hasFiles()` 검사가 음성 프로필이 있는 회원의 탈퇴를 보류한다. 파일 정리 완료와 탈퇴의 연결은 후속 합의 사항이다.
+
+`retryPendingCleanup()`은 현재 자동 스케줄러나 운영 호출부가 없다. 메모리의 동시 접근 지원 집합과 사용자 DB 잠금으로 처리하며, 재시도 직전에 두 컬럼의 현재 참조를 확인한다. 동시 재시도로 삭제가 중복 호출될 수 있어 저장소 삭제는 멱등이어야 한다. 간격·백오프·최대 보존 건수 정책이 없으므로 반복 실패 시 대기 건수가 늘 수 있다. 재시작을 견디는 복구를 위해서는 커밋한 교체·삭제와 함께 이전 파일 정리 작업을 같은 트랜잭션에 기록하고, 롤백으로 남을 신규 파일은 별도의 준비 작업 기록으로 추적하는 방법을 검토한다. 영속 큐·Outbox와 스케줄러는 추가 승인 대상이다.
+
+### API 및 별도 작업 경계
+
+기존 협의의 `POST /voice-profile`, `PUT /api/internal/voice-profiles/{userId}`와 Notion의 `POST /api/ai/voice-profiles`, `POST /api/voice-profiles`, `GET /api/voice-profiles/me/features`는 합의가 필요하다. 이번 단계는 조회 DTO·서비스와 키 비교 모듈까지이며 실제 REST 경로나 Method를 확정하지 않는다.
+
+위험 확정 세션은 추후 승인 후 정식 `origin/develop`에서 `feature/safe-return-risk-persistence`로 분리한다. Voice 전용 커밋을 포함하지 않는다. 기존 `RiskService`, `RiskSessionBridge`, `SafeReturnSessionService.endSession()`을 기준으로 최종 확정 이벤트와 종료 동기화를 별도 분석한다.

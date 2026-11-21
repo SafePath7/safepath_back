@@ -108,6 +108,59 @@ class VoiceProfileRepositoryTest {
     }
 
     @Test
+    void featuresReadPreservesNestedJsonSeparatesUsersAndLeavesDatabaseUnchanged() {
+        rollback(userId -> {
+            var features = new VoiceProfileFeatureService(new VoiceProfileService(repository));
+            long otherId = insertFixtureUser();
+            var mapper = new JsonMapper();
+            var details = mapper.createObjectNode().set("urgent", mapper.createObjectNode()
+                    .set("samples", mapper.createArrayNode().add(1).add(2)));
+            var embedding = new float[192];
+            embedding[0] = 1;
+            var consent = LocalDateTime.of(2026, 1, 1, 0, 0);
+            repository.saveAndFlush(new VoiceProfile(userId, embedding, "private-calm-reference", -20,
+                    140, "first-model", consent, details, "private-urgent-reference"));
+            repository.saveAndFlush(new VoiceProfile(otherId, new float[]{0.25f}, "private-other-reference", -35,
+                    180, "legacy-model", consent));
+            entityManager.clear();
+            String snapshotQuery = "SELECT to_jsonb(profile)::text FROM voice_profiles profile WHERE user_id = ?";
+            String before = jdbc.queryForObject(snapshotQuery, String.class, userId);
+
+            var first = features.getFeatures(userId);
+            var second = features.getFeatures(otherId);
+            assertArrayEquals(embedding, first.speakerEmbedding());
+            assertEquals(-20, first.baselineVolume());
+            assertEquals(140, first.baselinePitch());
+            assertEquals("first-model", first.modelVersion());
+            assertEquals(details, first.baselineDetails());
+            assertArrayEquals(new float[]{0.25f}, second.speakerEmbedding());
+            assertEquals("legacy-model", second.modelVersion());
+            assertNull(second.baselineDetails());
+            first.speakerEmbedding()[0] = 0;
+            ((tools.jackson.databind.node.ObjectNode) first.baselineDetails()).remove("urgent");
+            assertEquals(1, first.speakerEmbedding()[0]);
+            assertEquals(details, first.baselineDetails());
+            var serialized = mapper.valueToTree(first);
+            assertEquals(5, serialized.size());
+            assertFalse(serialized.has("audioFileUrl"));
+            assertFalse(serialized.has("urgentAudioFileUrl"));
+            assertFalse(first.toString().contains("first-model"));
+            assertEquals(before, jdbc.queryForObject(snapshotQuery, String.class, userId));
+        });
+    }
+
+    @Test
+    void featuresDistinguishUnregisteredProfileAndInvalidUser() {
+        rollback(userId -> {
+            var features = new VoiceProfileFeatureService(new VoiceProfileService(repository));
+            assertEquals(VoiceProfileException.Reason.NOT_FOUND,
+                    assertThrows(VoiceProfileException.class, () -> features.getFeatures(userId)).reason());
+            assertEquals(VoiceProfileException.Reason.INVALID_INPUT,
+                    assertThrows(VoiceProfileException.class, () -> features.getFeatures(0L)).reason());
+        });
+    }
+
+    @Test
     void legacyInsertReadsNewColumnsAsSqlNull() {
         rollback(userId -> {
             jdbc.update("""
@@ -237,14 +290,18 @@ class VoiceProfileRepositoryTest {
     private void rollback(Consumer<Long> test) {
         transaction.executeWithoutResult(status -> {
             status.setRollbackOnly();
-            long userId = ThreadLocalRandom.current().nextLong(1_000_000_000_000L, 2_000_000_000_000L);
-            String marker = "voice-test-" + UUID.randomUUID();
-            jdbc.update("""
-                    INSERT INTO users (id, firebase_uid, name, email, phone_hash, phone_encrypted)
-                    VALUES (?, ?, 'voice repository test', ?, ?, 'synthetic-test-value')
-                    """, userId, marker, marker + "@example.test", marker);
-            test.accept(userId);
+            test.accept(insertFixtureUser());
         });
+    }
+
+    private long insertFixtureUser() {
+        long userId = ThreadLocalRandom.current().nextLong(1_000_000_000_000L, 2_000_000_000_000L);
+        String marker = "voice-test-" + UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO users (id, firebase_uid, name, email, phone_hash, phone_encrypted)
+                VALUES (?, ?, 'voice repository test', ?, ?, 'synthetic-test-value')
+                """, userId, marker, marker + "@example.test", marker);
+        return userId;
     }
 
     @TestConfiguration(proxyBeanMethods = false)
