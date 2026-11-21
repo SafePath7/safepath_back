@@ -199,7 +199,7 @@ public class GuardianRegistrationService {
         return repository.findByUserIdAndGuardianId(userId, guardianId)
                 .filter(registration -> registration.getStatus() == RegistrationStatus.ACCEPTED)
                 .map(registration -> new GuardianAccess(true,
-                        registration.isCanViewLocation(), registration.isCanViewStatus()))
+                        registration.isCanViewLocation(), registration.isCanViewLocation()))
                 .orElse(GuardianAccess.NONE);
     }
 

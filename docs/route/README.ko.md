@@ -4,7 +4,7 @@
 
 ## 기능과 범위
 
-`POST /api/routes`는 출발지와 목적지의 위도·경도를 받아 Mapbox 도보 경로와 안전시설 데이터를 바탕으로 추천·안전 우선·가장 빠른 경로를 반환합니다. 경로 계산 결과를 DB나 세션에 저장하지 않습니다. 선택한 경로의 세션 저장, 보호자 공유, WebSocket 연동은 아직 구현되어 있지 않습니다.
+`POST /api/routes`는 출발지와 목적지의 위도·경도를 받아 Mapbox 도보 경로와 안전시설 데이터를 바탕으로 추천·안전 우선·가장 빠른 경로를 반환합니다. 추천 API 자체는 결과를 저장하지 않습니다. 선택한 경로는 [세션 시작 요청](../safe-return-session/README.md)에 전달할 수 있으며 세션이 활성화된 동안 메모리에 보관됩니다.
 
 API의 점수는 **시설 접근성에 관한 임시 지표**입니다. 범죄·사고 확률이나 실제 안전을 검증하거나 보장하지 않습니다. 시설이 누락된 구간은 위험하다고 단정할 수 없습니다.
 
@@ -100,7 +100,7 @@ Content-Type: application/json
 
 ## 경로 선정과 점수
 
-1. `MapboxRouteClient.find`는 `mapbox/walking`, `alternatives=true`, 전체 GeoJSON 경로를 요청합니다. 후보가 6개 미만이면 보행로 선호도 1, -1, 0.5, -0.5 순으로 최대 4회 추가 요청합니다. 좌표 배열이 정확히 같은 결과를 중복 제거하며, 6개 이상 확보하면 추가 요청을 중단합니다. 마지막 요청에서 후보가 추가되면 6개를 초과할 수 있습니다.
+1. `MapboxRouteClient.find`는 `mapbox/walking`, `alternatives=true`, 전체 GeoJSON 경로를 요청합니다. 후보가 10개 미만이면 보행로 선호도 1, -1, 0.5, -0.5 순으로 최대 4회 추가 요청합니다. 좌표 배열이 정확히 같은 결과를 중복 제거하고, 먼저 확보한 후보부터 최대 10개를 유지합니다. 10개를 확보하면 추가 요청을 중단합니다.
 2. `RouteService.recommend`는 확보한 후보 전체를 평가합니다. 따라서 아래의 최상위 경로들은 **평가 대상 후보 중** 선택한 결과이며 도로망 전체의 최적 경로가 아닙니다.
 3. 기존 `SafetyFacilityService.findFacilitiesInBounds`로 후보를 감싸는 사각 영역의 시설을 한 번 조회합니다. 현재 PostGIS는 사용하지 않습니다.
 4. `RouteScorer`는 경로를 기본 100m 단위로 나누고, `FacilitySafetyFactor`는 각 시설을 반경 80m 내 가장 가까운 구간 대표점 하나에만 배정합니다. 중복 시설 ID는 한 번만 반영합니다.
@@ -122,7 +122,7 @@ Content-Type: application/json
 1. 출발지와 목적지를 보내고 `routes`의 `type`으로 세 카드를 구분합니다.
 2. 선택한 카드의 `coordinates`를 순서대로 지도 SDK의 폴리라인에 전달합니다. API는 이름이 있는 위도·경도 객체를 주지만 GeoJSON 배열은 `[longitude, latitude]` 순서입니다.
 3. `durationSeconds / 60`으로 분 단위를 표시하고, `safetyScore == null`은 ‘정보 부족’으로 표시합니다. `observedFraction`도 함께 고려합니다.
-4. `sameAsTypes`가 있으면 ‘추천·가장 빠름 동일’처럼 표시합니다. 세션에 경로를 전달·저장하는 계약은 아직 없습니다.
+4. `sameAsTypes`가 있으면 ‘추천·가장 빠름 동일’처럼 표시합니다. 선택한 경로의 유형·좌표·거리·시간·점수는 세션 시작 요청의 `selectedRoute`에 전달합니다.
 
 ## 테스트
 

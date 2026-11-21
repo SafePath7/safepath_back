@@ -176,7 +176,7 @@ class S3MediaApiDatabaseTests {
                 Long.class, uid, uid, uid + "@example.test");
     }
     private void guardian(long owner, String uid, String status, int viewStatus) {
-        jdbc.update("INSERT INTO guardian_registrations (user_id,guardian_id,status,can_view_status) VALUES (?,?,?,?)",
+        jdbc.update("INSERT INTO guardian_registrations (user_id,guardian_id,status,can_view_location) VALUES (?,?,?,?)",
                 owner, user(uid), status, viewStatus);
     }
     private long event(UUID session) {

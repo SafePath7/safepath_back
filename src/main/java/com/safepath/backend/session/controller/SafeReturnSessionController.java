@@ -1,6 +1,9 @@
 package com.safepath.backend.session.controller;
 
 import com.safepath.backend.session.dto.ActiveSessionResponse;
+import com.safepath.backend.session.dto.StartSessionRequest;
+import com.safepath.backend.session.dto.StartSessionResponse;
+import com.safepath.backend.monitoring.service.GuardianMonitoringService;
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.service.SafeReturnSessionService;
 import com.safepath.backend.user.UserService;
@@ -14,9 +17,11 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/safe-return/sessions")
@@ -24,19 +29,24 @@ public class SafeReturnSessionController {
 
 	private final SafeReturnSessionService safeReturnSessionService;
 	private final UserService userService;
+	private final GuardianMonitoringService monitoringService;
 
 	public SafeReturnSessionController(
 			SafeReturnSessionService safeReturnSessionService,
-			UserService userService) {
+			UserService userService, GuardianMonitoringService monitoringService) {
 		this.safeReturnSessionService = safeReturnSessionService;
 		this.userService = userService;
+		this.monitoringService = monitoringService;
 	}
 
 	@PostMapping
-	public ResponseEntity<ActiveSessionResponse> startSession(
-			@AuthenticationPrincipal String firebaseUid) {
-		ActiveSession session = safeReturnSessionService.startSession(authenticatedUserId(firebaseUid));
-		return ResponseEntity.status(HttpStatus.CREATED).body(ActiveSessionResponse.from(session));
+	public ResponseEntity<StartSessionResponse> startSession(
+			@AuthenticationPrincipal String firebaseUid, @Valid @RequestBody StartSessionRequest request) {
+		Long userId = authenticatedUserId(firebaseUid);
+		ActiveSession session = safeReturnSessionService.startSession(userId, request.guardianIds(), request.selectedRoute());
+		String channelId = monitoringService.getChannelId(session.id(), userId);
+		return ResponseEntity.status(HttpStatus.CREATED)
+				.body(new StartSessionResponse(session.id(), session.startedAt(), channelId));
 	}
 
 	@GetMapping("/{sessionId}/status")

@@ -1,0 +1,264 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+  push:
+    branches:
+      - develop
+
+concurrency:
+  group: backend-ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: safepath
+          POSTGRES_USER: safepath_ci
+          POSTGRES_PASSWORD: safepath_ci_test_password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U safepath_ci -d safepath"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: 소스 코드 가져오기
+        uses: actions/checkout@v6
+
+      - name: Java 21 설정
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: 테스트용 환경 설정
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=safepath_ci
+          POSTGRES_PASSWORD=safepath_ci_test_password
+          EOF
+
+      - name: 테스트 및 실행용 JAR 빌드
+        run: bash ./gradlew build bootJar
+
+      - name: 배포용 JAR 준비
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          mkdir -p deploy
+
+          mapfile -t jars < <(
+            find build/libs -maxdepth 1 -type f \
+              -name '*.jar' ! -name '*-plain.jar'
+          )
+
+          if [ "${#jars[@]}" -ne 1 ]; then
+            echo "실행용 JAR이 정확히 1개여야 합니다. 발견된 파일: ${#jars[@]}"
+            printf '%s\n' "${jars[@]}"
+            exit 1
+          fi
+
+          cp "${jars[0]}" deploy/backend.jar
+
+      - name: 배포용 JAR 저장
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: deploy/backend.jar
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: 테스트 결과 저장
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: |
+            build/reports/tests/test/
+            build/test-results/test/
+          if-no-files-found: warn
+
+  aws-auth-check:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: 배포 스크립트 가져오기
+        uses: actions/checkout@v6
+
+      - name: GitHub OIDC 대상 확인
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('sts.amazonaws.com');
+            const payload = JSON.parse(
+              Buffer.from(token.split('.')[1], 'base64url').toString()
+            );
+            console.log('sub:', payload.sub);
+            console.log('aud:', payload.aud);
+
+      - name: AWS 역할로 인증
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: AWS 계정 확인
+        run: aws sts get-caller-identity
+
+      - name: 배포용 JAR 다운로드
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar
+          path: deploy
+
+      - name: 배포용 JAR을 S3에 업로드
+        run: |
+          aws s3 cp deploy/backend.jar \
+            "s3://safepath-dev-risk-media-kr/deploy/${GITHUB_SHA}/backend.jar"
+
+      - name: 배포 스크립트 문법 확인
+        run: bash -n scripts/deploy-backend.sh
+
+      - name: 배포 스크립트를 S3에 업로드
+        run: |
+          aws s3 cp scripts/deploy-backend.sh \
+            "s3://safepath-dev-risk-media-kr/deploy/${GITHUB_SHA}/deploy-backend.sh"
+
+      - name: EC2 명령 전달 확인
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --region ap-northeast-2 \
+            --instance-ids i-0967f249082d796da \
+            --document-name AWS-RunShellScript \
+            --parameters 'commands=["systemctl is-active safepath-backend"]' \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "SSM 명령 ID: $COMMAND_ID"
+
+          aws ssm wait command-executed \
+            --region ap-northeast-2 \
+            --command-id "$COMMAND_ID" \
+            --instance-id i-0967f249082d796da
+
+          aws ssm get-command-invocation \
+            --region ap-northeast-2 \
+            --command-id "$COMMAND_ID" \
+            --instance-id i-0967f249082d796da \
+            --query '{Status:Status,Output:StandardOutputContent}' \
+            --output json
+
+      - name: EC2에 백엔드 배포
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # 오래된 워크플로가 최신 develop 커밋을 덮어쓰지 않도록 확인
+          LATEST_SHA=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/develop" \
+            --jq '.object.sha')
+
+          if [ "$GITHUB_SHA" != "$LATEST_SHA" ]; then
+            echo "현재 실행은 최신 develop 커밋이 아닙니다."
+            echo "현재 실행: $GITHUB_SHA"
+            echo "최신 커밋: $LATEST_SHA"
+            exit 1
+          fi
+
+          # EC2에서 S3의 배포 스크립트를 가져와 실행
+          REMOTE_SCRIPT=$(cat <<'EOF'
+          set -eu
+
+          TEMP_DIR=$(mktemp -d)
+          trap 'rm -rf "$TEMP_DIR"' EXIT
+
+          aws s3 cp \
+            "s3://safepath-dev-risk-media-kr/deploy/$COMMIT_SHA/deploy-backend.sh" \
+            "$TEMP_DIR/deploy-backend.sh" \
+            --region ap-northeast-2
+
+          bash -n "$TEMP_DIR/deploy-backend.sh"
+          bash "$TEMP_DIR/deploy-backend.sh" "$COMMIT_SHA"
+          EOF
+          )
+
+          # SSM에 전달할 명령을 JSON으로 생성
+          PARAMETERS=$(jq -n \
+            --arg sha "$GITHUB_SHA" \
+            --arg script "$REMOTE_SCRIPT" \
+            '{
+              commands: [("COMMIT_SHA=" + $sha + "\n" + $script)],
+              executionTimeout: ["1200"]
+            }')
+
+          COMMAND_ID=$(aws ssm send-command \
+            --region ap-northeast-2 \
+            --instance-ids i-0967f249082d796da \
+            --document-name AWS-RunShellScript \
+            --parameters "$PARAMETERS" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "배포 SSM 명령 ID: $COMMAND_ID"
+
+          # SSM 명령이 완료될 때까지 최대 약 20분 동안 확인
+          for attempt in $(seq 1 240); do
+            if RESULT=$(aws ssm get-command-invocation \
+              --region ap-northeast-2 \
+              --command-id "$COMMAND_ID" \
+              --instance-id i-0967f249082d796da \
+              --output json 2>ssm-error.txt); then
+
+              STATUS=$(echo "$RESULT" | jq -r '.Status')
+              echo "SSM 상태: $STATUS ($attempt/240)"
+
+              case "$STATUS" in
+                Success)
+                  echo "$RESULT" | jq -r '.StandardOutputContent'
+                  echo "EC2 배포 성공"
+                  exit 0
+                  ;;
+
+                Failed|Cancelled|TimedOut)
+                  echo "$RESULT" | jq -r '.StandardOutputContent'
+                  echo "$RESULT" | jq -r '.StandardErrorContent' >&2
+                  echo "EC2 배포 실패: $STATUS" >&2
+                  exit 1
+                  ;;
+              esac
+            else
+              # 명령 전송 직후에는 실행 결과가 아직 생성되지 않을 수 있음
+              if ! grep -q 'InvocationDoesNotExist' ssm-error.txt; then
+                cat ssm-error.txt >&2
+                exit 1
+              fi
+
+              echo "SSM 실행 결과 생성 대기 중 ($attempt/240)"
+            fi
+
+            sleep 5
+          done
+
+          echo "SSM 결과 확인 시간 초과. AWS 콘솔에서 명령 상태를 확인하세요." >&2
+          exit 1
