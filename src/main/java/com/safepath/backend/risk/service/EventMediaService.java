@@ -20,7 +20,11 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
-/** Reading follows the event's own rule; upload and delete are admin-only. */
+/**
+ * Reading follows the event's own rule. The member the event happened to (whose token the
+ * AI server forwards) or an admin may upload; delete is admin-only. Uploads are accepted
+ * in any event status and without a per-event count limit.
+ */
 @Service
 public class EventMediaService {
     private static final Logger log = LoggerFactory.getLogger(EventMediaService.class);
@@ -39,8 +43,9 @@ public class EventMediaService {
 
     @Transactional
     public MediaResponse uploadEventMedia(Actor actor, long eventId, MultipartFile file, String mediaType) {
-        actor.requireAdmin();
-        lockEvent(eventId);
+        RiskEvent event = lockEvent(eventId);
+        // Ownership first: the owner's request needs no Firebase admin lookup.
+        if (actor.id() != event.getUserId()) actor.requireAdmin();
         var stored = storage.store(file);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -110,8 +115,8 @@ public class EventMediaService {
     }
 
     /** Uploads and deletes for one event run one at a time. */
-    private void lockEvent(long eventId) {
-        events.findForUpdateById(eventId).orElseThrow(() -> ApiException.notFound("위험 이벤트"));
+    private RiskEvent lockEvent(long eventId) {
+        return events.findForUpdateById(eventId).orElseThrow(() -> ApiException.notFound("위험 이벤트"));
     }
 
     private void cleanup(String key, long eventId) {
