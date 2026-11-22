@@ -11,7 +11,7 @@ import com.safepath.backend.risk.dto.RiskEventDetailResponse;
 import com.safepath.backend.risk.dto.RiskEventResponse;
 import com.safepath.backend.risk.entity.RiskEvent;
 import com.safepath.backend.risk.entity.RiskSessionSnapshot;
-import com.safepath.backend.risk.notification.RiskEventNotifications;
+import com.safepath.backend.risk.notification.RiskAlertPolicy;
 import com.safepath.backend.risk.repository.RiskEventRepository;
 
 import org.springframework.data.domain.PageRequest;
@@ -21,14 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class RiskService {
     private final RiskEventRepository events;
-    private final RiskEventNotifications notifications;
+    private final RiskAlertPolicy alerts;
     private final RiskSessionBridge sessions;
     private final RiskEventAccess access;
 
-    public RiskService(RiskEventRepository events, RiskEventNotifications notifications,
+    public RiskService(RiskEventRepository events, RiskAlertPolicy alerts,
             RiskSessionBridge sessions, RiskEventAccess access) {
         this.events = events;
-        this.notifications = notifications;
+        this.alerts = alerts;
         this.sessions = sessions;
         this.access = access;
     }
@@ -58,7 +58,7 @@ public class RiskService {
         RiskSessionSnapshot session = sessions.ensurePersistedOwner(actor, request.sessionId());
         RiskEvent event = events.saveAndFlush(new RiskEvent(session, request.eventType(),
                 request.description(), UtcTime.fromInstant(request.detectedAt())));
-        notifications.afterCommit(session.getUserId(), event.getId(), event.getEventType());
+        alerts.onCreated(event);
         return RiskEventResponse.from(event);
     }
 
@@ -70,9 +70,10 @@ public class RiskService {
         long userId = event.getUserId();
         // Ownership first: the owner's request needs no Firebase admin lookup.
         if (actor.id() != userId) actor.requireAdmin();
+        String previousStatus = event.getStatus();
         event.changeStatus(status);
         events.saveAndFlush(event);
-        notifications.afterCommit(userId, event.getId(), event.getEventType());
+        alerts.onStatusChanged(event, previousStatus);
         return RiskEventResponse.from(event);
     }
 }

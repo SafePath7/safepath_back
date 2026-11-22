@@ -148,18 +148,51 @@ class S3MediaApiDatabaseTests {
     }
 
     @Test
-    void uploadAndDeleteStayAdminOnlyEvenForViewers() throws Exception {
+    void viewersOtherThanTheOwnerCannotUploadAndDeleteStaysAdminOnly() throws Exception {
         long mediaId = upload();
         clearInvocations(s3);
-        for (String uid : new String[] {"owner", "guardian"}) {
+        for (String uid : new String[] {"guardian", "stranger"}) {
             mvc.perform(multipart(path(eventId)).file(new MockMultipartFile("file", "recording.wav", "audio/wav", bytes))
                             .param("mediaType", "AUDIO").header("Authorization", "Bearer " + uid))
                     .andExpect(status().isForbidden());
+        }
+        for (String uid : new String[] {"owner", "guardian"}) {
             mvc.perform(delete(path(eventId) + "/" + mediaId).header("Authorization", "Bearer " + uid))
                     .andExpect(status().isForbidden());
         }
         verifyNoInteractions(s3);
         assertThat(objects).hasSize(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM risk_event_medias WHERE event_id=?", Integer.class, eventId)).isOne();
+    }
+
+    @Test
+    void ownerUploadsManyFilesOfBothTypesKeptInUploadOrder() throws Exception {
+        int count = 25;
+        for (int i = 1; i <= count; i++) {
+            boolean audio = i % 2 == 1;
+            String name = String.format(audio ? "chunk_%04d.wav" : "sensor_%04d.json", i);
+            mvc.perform(multipart(path(eventId))
+                            .file(new MockMultipartFile("file", name, audio ? "audio/wav" : "application/json", bytes))
+                            .param("mediaType", audio ? "audio" : "sensor").header("Authorization", "Bearer owner"))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.eventId").value(eventId))
+                    .andExpect(jsonPath("$.fileName").value(name));
+        }
+        mvc.perform(get(path(eventId)).header("Authorization", "Bearer owner"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(count))
+                .andExpect(jsonPath("$[0].fileName").value("chunk_0001.wav"))
+                .andExpect(jsonPath("$[1].mediaType").value("sensor"))
+                .andExpect(jsonPath("$[24].fileName").value("chunk_0025.wav"));
+        assertThat(objects).hasSize(count);
+    }
+
+    @Test
+    void ownerStillUploadsAfterTheEventIsDismissed() throws Exception {
+        jdbc.update("UPDATE risk_events SET status='DISMISSED' WHERE id=?", eventId);
+        mvc.perform(multipart(path(eventId)).file(new MockMultipartFile("file", "chunk_0001.wav", "audio/wav", bytes))
+                        .param("mediaType", "audio").header("Authorization", "Bearer owner"))
+                .andExpect(status().isCreated());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM risk_event_medias WHERE event_id=?", Integer.class, eventId)).isOne();
     }
 
