@@ -47,7 +47,7 @@ class GuardianLocationSubscriptionTest {
 	private final GuardianRegistrationRepository repository = mock(GuardianRegistrationRepository.class);
 	private final GuardianRegistrationService permissions = new GuardianRegistrationService(repository, mock(GuardianRequestNotifier.class));
 	private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(
-			sessions, selected, mappings, channels, permissions, mock(com.safepath.backend.notification.NotificationService.class));
+			sessions, selected, mappings, channels, permissions, mock(com.safepath.backend.notification.NotificationService.class), org.mockito.Mockito.mock(com.safepath.backend.risk.service.RiskSessionBridge.class));
 	private final GuardianMonitoringService monitoring = new GuardianMonitoringService(
 			sessions, permissions, selected, mappings);
 	private final GuardianRegistration registration = BeanUtils.instantiateClass(GuardianRegistration.class);

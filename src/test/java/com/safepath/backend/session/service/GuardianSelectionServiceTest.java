@@ -27,7 +27,7 @@ class GuardianSelectionServiceTest {
     private final SelectedGuardianStore selected = new SelectedGuardianStore(sessions);
     private final GuardianRegistrationService permissions = mock(GuardianRegistrationService.class);
     private final GuardianSelectionService selection = new GuardianSelectionService(sessions, selected);
-    private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(sessions, selected, new com.safepath.backend.session.store.SessionChannelStore(), new com.safepath.backend.websocket.InMemoryChannelRegistry(), permissions, mock(com.safepath.backend.notification.NotificationService.class));
+    private final SafeReturnSessionService lifecycle = new SafeReturnSessionService(sessions, selected, new com.safepath.backend.session.store.SessionChannelStore(), new com.safepath.backend.websocket.InMemoryChannelRegistry(), permissions, mock(com.safepath.backend.notification.NotificationService.class), org.mockito.Mockito.mock(com.safepath.backend.risk.service.RiskSessionBridge.class));
     private final ActiveSession session = new ActiveSession(UUID.randomUUID(), 42L, Instant.now());
 
     GuardianSelectionServiceTest() {

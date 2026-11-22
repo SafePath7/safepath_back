@@ -1,5 +1,7 @@
 package com.safepath.backend.risk.service;
 
+import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.safepath.backend.common.auth.CurrentUser.Actor;
@@ -15,11 +17,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Persists the existing session module's in-memory session only when its first risk
- * event is saved. ACTIVE is a snapshot at this point, not a synchronized session
- * lifecycle. This module never changes the teammate's in-memory session store.
- * The session module's status rules are still undecided; endSession does not update
- * this snapshot's status or ended_at. Those fields require an agreed lifecycle.
+ * Persists the active session with its first risk event and updates the existing
+ * snapshot when the session ends.
  */
 @Component
 public class RiskSessionBridge {
@@ -29,6 +28,15 @@ public class RiskSessionBridge {
     public RiskSessionBridge(RiskSessionSnapshotRepository snapshots, ActiveSessionStore activeSessions) {
         this.snapshots = snapshots;
         this.activeSessions = activeSessions;
+    }
+
+    public Optional<ActiveSession> findActiveSession(UUID sessionId) {
+        return activeSessions.findById(sessionId);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void endSnapshot(UUID sessionId, long userId, Instant endedAt) {
+        snapshots.markEnded(sessionId, userId, RiskSessionSnapshot.ENDED, UtcTime.fromInstant(endedAt));
     }
 
     /** Returns the saved session, which the caller must own. */

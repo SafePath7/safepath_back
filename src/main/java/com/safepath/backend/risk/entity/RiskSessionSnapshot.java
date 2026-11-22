@@ -13,14 +13,15 @@ import lombok.NoArgsConstructor;
 
 /**
  * The risk module's read view of safe_return_sessions. The session module keeps live
- * sessions in memory; a row is written only when a session gets its first risk event
- * (see RiskSessionBridge), through the repository's conflict-safe insert.
+ * sessions in memory. The first risk event creates the row, and the session
+ * lifecycle updates that existing row when the session ends.
  */
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "safe_return_sessions")
 public class RiskSessionSnapshot {
+    public static final String ENDED = "ENDED";
     @Id
     private UUID id;
 

@@ -30,7 +30,7 @@ class GuardianMonitoringServiceTest {
 	private final SelectedGuardianStore selectedGuardianStore = new SelectedGuardianStore(activeSessionStore);
 	private final GuardianRegistrationService permissionService = mock(GuardianRegistrationService.class);
 	private final GuardianRegistrationService selectionPermissionService = mock(GuardianRegistrationService.class);
-	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), selectionPermissionService, mock(com.safepath.backend.notification.NotificationService.class));
+	private final SafeReturnSessionService sessionService = new SafeReturnSessionService(activeSessionStore, selectedGuardianStore, new SessionChannelStore(), new InMemoryChannelRegistry(), selectionPermissionService, mock(com.safepath.backend.notification.NotificationService.class), org.mockito.Mockito.mock(com.safepath.backend.risk.service.RiskSessionBridge.class));
 	private final GuardianMonitoringService monitoringService = new GuardianMonitoringService(
 			activeSessionStore, permissionService, selectedGuardianStore, new SessionChannelStore());
 	private ActiveSession session;

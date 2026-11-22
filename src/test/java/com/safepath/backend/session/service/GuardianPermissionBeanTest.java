@@ -8,6 +8,7 @@ import com.safepath.backend.guardian.entity.RegistrationStatus;
 import com.safepath.backend.guardian.repository.GuardianRegistrationRepository;
 import com.safepath.backend.guardian.service.GuardianRegistrationService;
 import com.safepath.backend.guardian.service.GuardianRequestNotifier;
+import com.safepath.backend.risk.service.RiskSessionBridge;
 import com.safepath.backend.websocket.InMemoryChannelRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.BeanUtils;
@@ -33,6 +34,7 @@ class GuardianPermissionBeanTest {
 			context.registerBean(GuardianRequestNotifier.class, () -> mock(GuardianRequestNotifier.class));
 			context.registerBean(com.safepath.backend.notification.NotificationService.class,
 					() -> mock(com.safepath.backend.notification.NotificationService.class));
+			context.registerBean(RiskSessionBridge.class, () -> mock(RiskSessionBridge.class));
 			context.register(GuardianRegistrationService.class, InMemoryChannelRegistry.class);
 			context.scan("com.safepath.backend.session.service", "com.safepath.backend.session.store",
 					"com.safepath.backend.monitoring.service");

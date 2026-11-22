@@ -52,7 +52,14 @@ jobs:
           POSTGRES_PASSWORD=safepath_ci_test_password
           EOF
 
+      - name: 위험 이벤트 통합 테스트 DB 생성
+        run: docker exec "${{ job.services.postgres.id }}" createdb -U safepath_ci safepath_risk_eventkey_test
+
       - name: 테스트 및 실행용 JAR 빌드
+        env:
+          SAFEPATH_RISK_TEST_DB_URL: jdbc:postgresql://127.0.0.1:5433/safepath_risk_eventkey_test
+          SAFEPATH_RISK_TEST_DB_USERNAME: safepath_ci
+          SAFEPATH_RISK_TEST_DB_PASSWORD: safepath_ci_test_password
         run: bash ./gradlew build bootJar
 
       - name: 배포용 JAR 준비
