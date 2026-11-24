@@ -21,7 +21,7 @@ Firebase 인증과 회원가입·회원정보 관리, 보호자 연결, 안전�
 
 1. JDK 21과 Docker Desktop을 준비하고 Docker 엔진을 실행합니다.
 2. 프로젝트 루트에서 `.env.example`을 `.env`로 복사하고 `POSTGRES_PASSWORD`를 로컬 전용 값으로 변경합니다. `POSTGRES_DB=safepath`를 유지합니다. Firebase 서비스 계정 JSON 파일을 안전한 위치에 준비하고, `.env`에 `GOOGLE_APPLICATION_CREDENTIALS=/JSON/파일의/절대경로`를 추가합니다.
-3. `docker compose up -d`로 DB를 시작하고 `docker compose ps`에서 healthy 상태를 확인합니다.
+3. `docker compose up -d postgres`로 DB만 시작하고 `docker compose ps`에서 healthy 상태를 확인합니다.
 4. IntelliJ 실행 설정에서 `local` 프로필을 활성화하고 프로젝트 루트를 작업 디렉터리로 지정합니다. 로컬 설정은 프로젝트 루트의 `.env`를 읽습니다.
 5. `BackendApplication`을 실행합니다. 로컬 DB는 `localhost:5433/safepath`이며 Flyway 자동 실행과 JPA `ddl-auto=validate`가 적용됩니다. 앱의 기본 주소는 `http://localhost:8080`입니다.
 
@@ -39,6 +39,8 @@ SPRING_PROFILES_ACTIVE=local sh gradlew bootRun
 동일한 환경에서 `SPRING_PROFILES_ACTIVE=local sh gradlew test`로 컨텍스트 테스트를 실행합니다. Windows에서는 같은 환경변수와 `local` 프로필을 설정한 뒤 `gradlew.bat bootRun`, `gradlew.bat test`를 사용할 수 있습니다. `gradlew.bat build` 또는 `sh gradlew build`는 테스트 후 빌드하며 결과물은 `build/libs`에 생성됩니다. 빌드 산출물 정리에는 `gradlew.bat clean` 또는 `sh gradlew clean`을 사용합니다. 기본 프로필에는 DB 접속 정보가 없어 컨텍스트 테스트가 실패할 수 있습니다.
 
 Windows PowerShell 명령과 환경변수 설정은 [Docker 문서](docs/docker/README.md#windows-powershell)를 참고하세요. 로컬 Flyway는 Spring Boot가 실행하므로 팀원이 Flyway CLI를 설치할 필요는 없습니다. 공용 RDS 마이그레이션은 DB 담당자만 수행합니다.
+
+백엔드와 별도 AI 저장소를 컨테이너로 함께 실행하려면 [세 서비스 실행 방법](docs/docker/README.md#세-서비스-함께-실행)을 참고하세요. 준비를 마친 뒤 프로젝트 루트에서 `docker compose up -d`를 실행합니다.
 
 ## Firebase 로그인 API
 
@@ -118,7 +120,7 @@ SAFEPATH_PHONE_HASH_KEY=<Base64로 인코딩한 별도의 32바이트 해시 키
 - `src/main/java/` — Spring Boot 애플리케이션
 - `src/main/resources/` — 공통·환경별 설정과 Flyway 마이그레이션
 - `src/test/` — 테스트 코드
-- `compose.yaml`, `.env.example` — 로컬 PostgreSQL 구성과 환경변수 예시
+- `Dockerfile`, `compose.yaml`, `.env.example` — 로컬 컨테이너 구성과 환경변수 예시
 - `docs/` — 아키텍처, DB, Docker, 배포 문서
 
 ## GitHub 협업
