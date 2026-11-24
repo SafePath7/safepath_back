@@ -1,0 +1,13 @@
+**
+!gradlew
+!build.gradle
+!settings.gradle
+!gradle/
+!gradle/**
+!src/
+!src/main/
+!src/main/**
+**/.env
+**/.env.*
+**/*service-account*.json
+**/*firebase*.json
