@@ -45,12 +45,18 @@ services:
   ai:
     build:
       context: ${AI_PROJECT_PATH:-../safepath_AI}
+      args:
+        INSTALL_MODELS: ${AI_INSTALL_MODELS:-1}
     restart: unless-stopped
     environment:
-      AI_LOAD_MODELS: "0"
+      AI_LOAD_MODELS: ${AI_LOAD_MODELS:-1}
+      AI_MODEL_CACHE_DIR: /cache/models
+      HF_HOME: /cache/huggingface
       AI_BACKEND_URL: http://backend:8080
       AI_BACKEND_KEY: ${AI_BACKEND_KEY:-}
       AI_API_KEY: ${AI_API_KEY:-}
+    volumes:
+      - ai_model_cache:/cache
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -58,3 +64,4 @@ services:
 
 volumes:
   postgres_data:
+  ai_model_cache:
