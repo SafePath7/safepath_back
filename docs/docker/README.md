@@ -23,7 +23,7 @@ curl 'http://localhost:8080/api/safety-facilities?zoom=10&southWestLat=37.0&sout
 curl http://localhost:8000/health
 ```
 
-첫 요청은 인증 없이 접근 가능한 실제 DB 조회 API입니다. 두 번째는 `mode`가 `dummy`인지 확인합니다. 포트 8080 또는 8000을 다른 프로세스가 사용 중이면 종료 여부를 직접 결정하거나 Compose 포트를 조정하세요. Spring Boot는 `postgres:5432`로 DB에, AI는 `http://backend:8080`으로 백엔드에 연결합니다. 백엔드에서 AI를 호출하는 기능은 현재 구현되어 있지 않습니다.
+첫 요청은 인증 없이 접근 가능한 실제 DB 조회 API입니다. 두 번째는 `mode`가 `model`이고 `models_loaded`에 `whisper`, `yamnet`, `speaker`가 있는지 확인합니다. 모델 다운로드와 로딩 중에는 AI 컨테이너가 실행 중이어도 응답하지 않을 수 있습니다. 포트 8080 또는 8000을 다른 프로세스가 사용 중이면 종료 여부를 직접 결정하거나 Compose 포트를 조정하세요. Spring Boot는 `postgres:5432`로 DB에, AI는 `http://backend:8080`으로 백엔드에 연결합니다. 백엔드에서 AI를 호출하는 기능은 현재 구현되어 있지 않습니다.
 
 AI의 백엔드 호출은 기능에 따라 Firebase ID 토큰이 필요하며 음성 프로필 관련 호출은 내부 키도 확인합니다. 해당 기능을 사용하려면 `.env`의 `AI_BACKEND_KEY`와 `SAFEPATH_AI_INTERNAL_KEY`에 같은 비밀값을 설정하고, 음성 저장소 등 해당 기능의 별도 설정을 준비하세요. 키와 토큰 없이 네트워크만 확인하려면 AI 컨테이너에서 다음 공개 API를 호출할 수 있습니다.
 
@@ -31,7 +31,25 @@ AI의 백엔드 호출은 기능에 따라 Firebase ID 토큰이 필요하며 �
 docker compose exec ai python -c "import urllib.request; print(urllib.request.urlopen('http://backend:8080/api/safety-facilities?zoom=10&southWestLat=37.0&southWestLng=126.0&northEastLat=38.0&northEastLng=128.0').status)"
 ```
 
-이는 네트워크와 공개 API 확인이며 인증된 AI 기능의 전체 검증은 아닙니다. 더미 모드에서는 실제 모델 추론 없이 고정 결과를 반환합니다. 실제 모델 모드는 AI 이미지의 `INSTALL_MODELS=1` 빌드와 `AI_LOAD_MODELS=1` 실행 설정, 모델 다운로드 및 자원이 필요합니다. 이 Compose 구성은 더미 모드이며 실제 모델은 검증하지 않았습니다. 자세한 준비는 AI 저장소 README를 참고하세요.
+이는 네트워크와 공개 API 확인이며 인증된 AI 기능의 전체 검증은 아닙니다.
+
+## AI 모델과 더미 모드
+
+기본 설정은 `AI_INSTALL_MODELS=1`, `AI_LOAD_MODELS=1`로 실제 모델 패키지를 빌드하고 모델을 로드합니다. 첫 빌드와 모델 다운로드에는 시간과 인터넷 연결, 충분한 디스크와 메모리가 필요합니다. `ai_model_cache` named volume은 `/cache`에 연결되어 YAMNet·ECAPA와 Hugging Face의 Whisper 가중치를 컨테이너 재생성 후에도 보관합니다. 기존 단독 테스트 컨테이너가 별도 캐시를 사용하지 않았다면 첫 Compose 실행에서 다시 다운로드합니다. `docker compose logs -f ai`로 로딩 진행 상황을 확인하세요.
+
+실제 모델은 음성을 분석하며, 더미 모드는 모델 추론 없이 고정 결과를 반환합니다. 더미 모드로 바꾸려면 백엔드 `.env`에 다음 두 값을 지정하고 AI 이미지를 다시 빌드합니다.
+
+```properties
+AI_INSTALL_MODELS=0
+AI_LOAD_MODELS=0
+```
+
+```sh
+docker compose up -d --build ai
+curl http://localhost:8000/health
+```
+
+`mode`가 `dummy`인지 확인합니다. 모델 모드로 돌아갈 때는 두 값을 `1`로 바꾸고 같은 빌드 명령을 실행합니다. 두 설정은 함께 변경해야 합니다. 캐시 볼륨은 모드를 바꾸어도 보존됩니다. 실제 모델 환경의 자세한 내용은 AI 저장소 README를 참고하세요.
 
 ## DB만 실행하거나 직접 개발하기
 
