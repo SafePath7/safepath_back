@@ -18,5 +18,50 @@ services:
       retries: 5
       start_period: 10s
 
+  backend:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_FLYWAY_ENABLED: "true"
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-safepath}
+      DB_USERNAME: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-service-account.json
+    volumes:
+      - type: bind
+        source: ${FIREBASE_SERVICE_ACCOUNT_PATH:-./firebase-service-account.json}
+        target: /run/secrets/firebase-service-account.json
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ai:
+    build:
+      context: ${AI_PROJECT_PATH:-../safepath_AI}
+      args:
+        INSTALL_MODELS: ${AI_INSTALL_MODELS:-1}
+    restart: unless-stopped
+    environment:
+      AI_LOAD_MODELS: ${AI_LOAD_MODELS:-1}
+      AI_MODEL_CACHE_DIR: /cache/models
+      HF_HOME: /cache/huggingface
+      AI_BACKEND_URL: http://backend:8080
+      AI_BACKEND_KEY: ${AI_BACKEND_KEY:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+    volumes:
+      - ai_model_cache:/cache
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
+  ai_model_cache:
