@@ -49,4 +49,10 @@ public class RiskEventMedia {
         this.createdAt = this.uploadedAt;
         this.updatedAt = this.uploadedAt;
     }
+
+    /** The file is gone after the retention period; the row stays as a record of the upload. */
+    public void clearStorage(LocalDateTime now) {
+        this.storageUrl = null;
+        this.updatedAt = now;
+    }
 }
