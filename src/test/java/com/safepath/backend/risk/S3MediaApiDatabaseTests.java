@@ -8,6 +8,8 @@ import java.util.UUID;
 import com.safepath.backend.auth.FirebaseTokenService;
 import com.safepath.backend.config.FirebaseConfig;
 import com.safepath.backend.common.auth.FirebaseAdminRoleLookup;
+import com.safepath.backend.risk.repository.RiskEventMediaRepository;
+import com.safepath.backend.risk.service.EventMediaRetentionService;
 import com.safepath.backend.risk.storage.EventMediaStorage;
 import com.safepath.backend.risk.storage.S3EventMediaStorage;
 
@@ -43,6 +45,8 @@ class S3MediaApiDatabaseTests {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired EventMediaStorage storage;
+    @Autowired EventMediaRetentionService retention;
+    @Autowired RiskEventMediaRepository medias;
     @MockitoBean(name = "eventMediaS3Client") S3Client s3;
     @MockitoBean FirebaseConfig firebaseConfig;
     @MockitoBean FirebaseTokenService tokens;
@@ -194,6 +198,33 @@ class S3MediaApiDatabaseTests {
                         .param("mediaType", "audio").header("Authorization", "Bearer owner"))
                 .andExpect(status().isCreated());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM risk_event_medias WHERE event_id=?", Integer.class, eventId)).isOne();
+    }
+
+    @Test
+    void retentionDeletesFilesOlderThanSevenDaysButKeepsTheEventAndMediaRows() throws Exception {
+        long oldId = upload();
+        jdbc.update("UPDATE risk_event_medias SET uploaded_at = uploaded_at - INTERVAL '8 days' WHERE id=?", oldId);
+        mvc.perform(multipart(path(eventId)).file(new MockMultipartFile("file", "fresh.wav", "audio/wav", bytes))
+                        .param("mediaType", "AUDIO").header("Authorization", "Bearer admin"))
+                .andExpect(status().isCreated());
+        long freshId = jdbc.queryForObject("SELECT max(id) FROM risk_event_medias WHERE event_id=?", Long.class, eventId);
+        String oldUrl = jdbc.queryForObject("SELECT storage_url FROM risk_event_medias WHERE id=?", String.class, oldId);
+
+        var result = retention.expireBatch();
+        medias.flush();
+
+        assertThat(result.cleared()).isOne();
+        assertThat(jdbc.queryForObject("SELECT storage_url FROM risk_event_medias WHERE id=?", String.class, oldId)).isNull();
+        assertThat(jdbc.queryForObject("SELECT storage_url FROM risk_event_medias WHERE id=?", String.class, freshId)).isNotNull();
+        assertThat(objects).hasSize(1).doesNotContainKey(oldUrl.substring("s3://safepath-media-test/".length()));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM risk_events WHERE id=?", Integer.class, eventId)).isOne();
+        mvc.perform(get(path(eventId)).header("Authorization", "Bearer admin"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(get(path(eventId)).param("mediaId", Long.toString(oldId)).header("Authorization", "Bearer admin"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get(path(eventId)).param("mediaId", Long.toString(freshId)).header("Authorization", "Bearer admin"))
+                .andExpect(status().isOk()).andExpect(content().bytes(bytes));
+        assertThat(retention.expireBatch().found()).isZero();
     }
 
     private long upload() throws Exception {
