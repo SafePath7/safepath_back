@@ -42,7 +42,7 @@ class GuardianSessionStartTest {
 
 	private final com.safepath.backend.notification.NotificationService notifications = mock(com.safepath.backend.notification.NotificationService.class);
 	private final SafeReturnSessionService service = new SafeReturnSessionService(
-			sessions, selected, mappings, channels, permissions, notifications);
+			sessions, selected, mappings, channels, permissions, notifications, org.mockito.Mockito.mock(com.safepath.backend.risk.service.RiskSessionBridge.class));
 
 	@Test
 	void oneGuardianStartsWithMatchingSelectionChannelAndMapping() {

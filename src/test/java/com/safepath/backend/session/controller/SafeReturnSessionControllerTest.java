@@ -522,6 +522,10 @@ class SafeReturnSessionControllerTest {
 			return mock(com.safepath.backend.notification.NotificationService.class);
 		}
 		@Bean
+		com.safepath.backend.risk.service.RiskSessionBridge riskSessionBridge() {
+			return mock(com.safepath.backend.risk.service.RiskSessionBridge.class);
+		}
+		@Bean
 		SessionChannelStore sessionChannelStore() {
 			return spy(new SessionChannelStore());
 		}

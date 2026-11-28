@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import com.safepath.backend.session.model.ActiveSession;
 import com.safepath.backend.session.dto.SelectedRoute;
 import com.safepath.backend.notification.NotificationService;
+import com.safepath.backend.risk.service.RiskSessionBridge;
 import com.safepath.backend.session.store.ActiveSessionStore;
 import com.safepath.backend.session.store.SelectedGuardianStore;
 import com.safepath.backend.session.store.ActiveSessionStore.RemovalResult;
@@ -34,16 +35,19 @@ public class SafeReturnSessionService {
 	private final InMemoryChannelRegistry channelRegistry;
 	private final GuardianRegistrationService guardianRegistrationService;
 	private final NotificationService notifications;
+	private final RiskSessionBridge riskSessions;
 
 	public SafeReturnSessionService(ActiveSessionStore activeSessionStore, SelectedGuardianStore selectedGuardianStore,
 			SessionChannelStore sessionChannelStore, InMemoryChannelRegistry channelRegistry,
-			GuardianRegistrationService guardianRegistrationService, NotificationService notifications) {
+			GuardianRegistrationService guardianRegistrationService, NotificationService notifications,
+			RiskSessionBridge riskSessions) {
 		this.activeSessionStore = activeSessionStore;
 		this.selectedGuardianStore = selectedGuardianStore;
 		this.sessionChannelStore = sessionChannelStore;
 		this.channelRegistry = channelRegistry;
 		this.guardianRegistrationService = guardianRegistrationService;
 		this.notifications = notifications;
+		this.riskSessions = riskSessions;
 	}
 
 	public ActiveSession startSession(Long userId, Collection<Long> guardianIds) {
@@ -151,10 +155,20 @@ public class SafeReturnSessionService {
 			throw new IllegalArgumentException("userId must be a positive number");
 		}
 
+		ActiveSession session = getSessionStatus(sessionId, userId);
 		Set<Long> guardians;
-		synchronized (activeSessionStore) {
+		synchronized (session) {
 			getSessionStatus(sessionId, userId);
-			guardians = selectedGuardianStore.findBySessionId(sessionId);
+			// A failed commit leaves the active session and its channel available for retry.
+			riskSessions.endSnapshot(sessionId, userId, Instant.now());
+			guardians = removeActiveSession(sessionId, userId);
+		}
+		notifyGuardians(userId, sessionId, guardians, false);
+	}
+
+	private Set<Long> removeActiveSession(UUID sessionId, Long userId) {
+		synchronized (activeSessionStore) {
+			Set<Long> guardians = selectedGuardianStore.findBySessionId(sessionId);
 			sessionChannelStore.findBySessionId(sessionId).ifPresent(channelId -> {
 				try {
 					channelRegistry.close(channelId);
@@ -171,8 +185,8 @@ public class SafeReturnSessionService {
 				case NOT_FOUND -> throw new NoSuchElementException("Active session not found");
 				case NOT_OWNER -> throw new SecurityException("User is not the owner of this active session");
 			}
+			return guardians;
 		}
-		notifyGuardians(userId, sessionId, guardians, false);
 	}
 
 	private void notifyGuardians(Long userId, UUID sessionId, Set<Long> guardians, boolean started) {

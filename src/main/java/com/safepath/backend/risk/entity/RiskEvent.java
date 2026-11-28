@@ -29,6 +29,9 @@ public class RiskEvent {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "event_key", updatable = false)
+    private UUID eventKey;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "session_id", nullable = false, updatable = false)
     private RiskSessionSnapshot session;

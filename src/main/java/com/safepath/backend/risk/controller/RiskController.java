@@ -16,6 +16,7 @@ import com.safepath.backend.risk.service.RiskService;
 import com.safepath.backend.common.auth.CurrentUser;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,9 +29,9 @@ public class RiskController {
     public RiskController(RiskService service, CurrentUser users) { this.service = service; this.users = users; }
 
     @PostMapping("/risk-events")
-    @ResponseStatus(HttpStatus.CREATED)
-    public RiskEventResponse createEvent(Authentication auth, @Valid @RequestBody EventRequest request) {
-        return service.createEvent(users.resolve(auth), request);
+    public ResponseEntity<RiskEventResponse> createEvent(Authentication auth, @Valid @RequestBody EventRequest request) {
+        var result = service.createOrReuseEvent(users.resolve(auth), request);
+        return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK).body(result.response());
     }
 
     /** userId omitted: my own events. Another member's events need guardian LOCATION permission. */

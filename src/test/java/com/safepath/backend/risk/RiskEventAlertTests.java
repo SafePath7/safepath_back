@@ -19,6 +19,8 @@ import com.safepath.backend.risk.service.RiskSessionBridge;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
@@ -32,13 +34,15 @@ class RiskEventAlertTests {
     final RiskEventRepository events = mock(RiskEventRepository.class);
     final RiskEventNotifications notifications = mock(RiskEventNotifications.class);
     final RiskSessionBridge sessions = mock(RiskSessionBridge.class);
+    final PlatformTransactionManager transactions = mock(PlatformTransactionManager.class);
     final RiskService service = new RiskService(events, new RiskAlertPolicy(notifications), sessions,
-            mock(RiskEventAccess.class));
+            mock(RiskEventAccess.class), transactions);
     final Actor owner = new Actor(OWNER, false);
     final RiskSessionSnapshot session = mock(RiskSessionSnapshot.class);
 
     @BeforeEach
     void setup() {
+        when(transactions.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         when(session.getUserId()).thenReturn(OWNER);
         when(session.getId()).thenReturn(UUID.randomUUID());
         when(events.saveAndFlush(any(RiskEvent.class))).thenAnswer(call -> {

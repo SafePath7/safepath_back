@@ -36,7 +36,7 @@ class SessionChannelLifecycleTest {
 	private final SessionChannelStore mappings = spy(new SessionChannelStore());
 	private final InMemoryChannelRegistry channels = spy(new InMemoryChannelRegistry());
 	private final GuardianRegistrationService permissions = org.mockito.Mockito.mock(GuardianRegistrationService.class);
-	private final SafeReturnSessionService service = new SafeReturnSessionService(sessions, guardians, mappings, channels, permissions, org.mockito.Mockito.mock(com.safepath.backend.notification.NotificationService.class));
+	private final SafeReturnSessionService service = new SafeReturnSessionService(sessions, guardians, mappings, channels, permissions, org.mockito.Mockito.mock(com.safepath.backend.notification.NotificationService.class), org.mockito.Mockito.mock(com.safepath.backend.risk.service.RiskSessionBridge.class));
 
 	@Test
 	void channelLookupReturnsOnlyActiveSessionForItsOwner() {
