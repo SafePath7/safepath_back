@@ -5,12 +5,16 @@ import java.util.UUID;
 
 import com.safepath.backend.risk.entity.RiskSessionSnapshot;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RiskSessionSnapshotRepository extends JpaRepository<RiskSessionSnapshot, UUID> {
+    Slice<RiskSessionSnapshot> findByUserId(Long userId, Pageable pageable);
+
     @Modifying
     @Query("""
             UPDATE RiskSessionSnapshot s
